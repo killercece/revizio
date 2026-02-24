@@ -3,110 +3,108 @@
 {% block title %}Verbes Irreguliers{% endblock %}
 
 {% block content %}
-<div class="quiz-container">
+<div class="max-w-2xl mx-auto">
 
     <!-- Ecran d'accueil -->
     <div id="screen-start" class="screen active">
-        <div class="start-card">
-            <div class="start-header">
-                <h2>Revise tes verbes irreguliers</h2>
-                <p class="subtitle">Entraine-toi jusqu'a les connaitre tous par coeur !</p>
-            </div>
-            <button class="btn btn-primary btn-lg" id="btn-start">
+        <div class="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 text-center">
+            <h2 class="text-xl font-bold mb-2">Revise tes verbes irreguliers</h2>
+            <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-6">Entraine-toi jusqu'a les connaitre tous par coeur !</p>
+            <button class="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-medium px-6 py-3 rounded-lg transition-colors" id="btn-start">
                 Commencer
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
-                    <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </button>
-            <div id="resume-section" class="resume-section" style="display:none;">
-                <div class="resume-divider"><span>ou</span></div>
-                <button class="btn btn-ghost btn-lg" id="btn-resume">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                        <polygon points="5 3 19 12 5 21 5 3"/>
-                    </svg>
+            <div id="resume-section" style="display:none;" class="mt-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="flex-1 h-px bg-zinc-200 dark:bg-zinc-700"></div>
+                    <span class="text-xs text-zinc-400">ou</span>
+                    <div class="flex-1 h-px bg-zinc-200 dark:bg-zinc-700"></div>
+                </div>
+                <button class="inline-flex items-center gap-2 text-zinc-600 dark:text-zinc-400 hover:text-violet-600 dark:hover:text-violet-400 font-medium px-4 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors" id="btn-resume">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     Reprendre la session
                 </button>
-                <p class="resume-info" id="resume-info"></p>
+                <p class="text-xs text-zinc-400 mt-2" id="resume-info"></p>
             </div>
-            <p class="verb-count-info" id="verb-count-info"></p>
+            <p class="text-xs text-zinc-400 mt-4" id="verb-count-info"></p>
         </div>
     </div>
 
     <!-- Ecran du quiz -->
     <div id="screen-quiz" class="screen">
-        <div class="quiz-progress">
-            <div class="progress-info">
-                <span class="round-badge" id="round-badge">Round 1</span>
-                <span class="progress-text" id="progress-text">Verbe 1 / 53</span>
+        <div class="w-full mb-6">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-3">
+                    <span class="text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 px-2.5 py-1 rounded-full" id="round-badge">Round 1</span>
+                    <span class="text-sm text-zinc-500 dark:text-zinc-400" id="progress-text">Verbe 1 / 53</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-sm" id="score-correct"></span>
+                    <span class="text-sm" id="score-wrong"></span>
+                    <button class="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 transition-colors" id="btn-pause" title="Pause">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                    </button>
+                </div>
             </div>
-            <div class="progress-bar">
-                <div class="progress-fill" id="progress-fill"></div>
-            </div>
-            <div class="score-info">
-                <span id="score-correct"></span>
-                <span id="score-wrong"></span>
-                <button class="btn-icon btn-icon-sm" id="btn-pause" title="Pause">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                        <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
-                    </svg>
-                </button>
+            <div class="w-full h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                <div class="h-full bg-violet-600 rounded-full transition-all duration-300" id="progress-fill" style="width:0%"></div>
             </div>
         </div>
 
-        <div class="quiz-card" id="quiz-card">
-            <div class="quiz-prompt">
-                <span class="prompt-label" id="prompt-label">Francais</span>
-                <span class="prompt-value" id="prompt-value">aller</span>
-                <span class="prompt-hint" id="prompt-hint"></span>
+        <div class="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6" id="quiz-card">
+            <div class="text-center mb-6">
+                <span class="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider" id="prompt-label">Francais</span>
+                <div class="text-2xl font-bold mt-1" id="prompt-value">aller</div>
+                <span class="text-sm text-zinc-400 mt-1 block" id="prompt-hint"></span>
             </div>
-            <div class="quiz-fields" id="quiz-fields"></div>
+            <div id="quiz-fields"></div>
             <button class="btn btn-primary" id="btn-validate">Valider</button>
         </div>
     </div>
 
     <!-- Ecran fin de round -->
     <div id="screen-round-end" class="screen">
-        <div class="result-card">
-            <div class="result-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+        <div class="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 text-center">
+            <div class="text-zinc-300 dark:text-zinc-600 mb-4">
+                <svg class="w-12 h-12 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                     <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
                     <path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>
                 </svg>
             </div>
-            <h2 id="round-result-title">Round 1 termine !</h2>
-            <p class="result-score" id="round-result-score">18 / 20 correct</p>
-            <p class="result-message" id="round-result-message">Plus que 2 verbes a revoir !</p>
-            <div class="retry-verbs" id="retry-verbs-list"></div>
-            <button class="btn btn-primary btn-lg" id="btn-next-round">Round suivant</button>
+            <h2 class="text-xl font-bold mb-1" id="round-result-title">Round 1 termine !</h2>
+            <p class="text-zinc-500 dark:text-zinc-400 mb-1" id="round-result-score">18 / 20 correct</p>
+            <p class="text-sm text-zinc-400 mb-4" id="round-result-message">Plus que 2 verbes a revoir !</p>
+            <div class="mb-6 flex flex-wrap justify-center" id="retry-verbs-list"></div>
+            <button class="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-medium px-6 py-3 rounded-lg transition-colors" id="btn-next-round">Round suivant</button>
         </div>
     </div>
 
     <!-- Ecran victoire -->
     <div id="screen-victory" class="screen">
-        <div class="victory-card">
-            <div class="victory-stars">
-                <span class="star">&#9733;</span>
-                <span class="star big">&#9733;</span>
-                <span class="star">&#9733;</span>
+        <div class="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 text-center">
+            <div class="flex justify-center gap-1 mb-4 text-amber-400">
+                <span class="text-3xl star-anim">&#9733;</span>
+                <span class="text-4xl star-anim" style="animation-delay:.15s">&#9733;</span>
+                <span class="text-3xl star-anim" style="animation-delay:.3s">&#9733;</span>
             </div>
-            <h2>Bravo !</h2>
-            <p class="victory-subtitle">Tu connais tous tes verbes !</p>
-            <div class="victory-stats">
-                <div class="stat-item">
-                    <span class="stat-value" id="victory-rounds">1</span>
-                    <span class="stat-label">round(s)</span>
+            <h2 class="text-xl font-bold mb-1">Bravo !</h2>
+            <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-6">Tu connais tous tes verbes !</p>
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <div>
+                    <div class="text-2xl font-bold text-violet-600 dark:text-violet-400" id="victory-rounds">1</div>
+                    <div class="text-xs text-zinc-400">round(s)</div>
                 </div>
-                <div class="stat-item">
-                    <span class="stat-value" id="victory-correct">20</span>
-                    <span class="stat-label">bonnes reponses</span>
+                <div>
+                    <div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400" id="victory-correct">20</div>
+                    <div class="text-xs text-zinc-400">bonnes reponses</div>
                 </div>
-                <div class="stat-item">
-                    <span class="stat-value" id="victory-accuracy">100%</span>
-                    <span class="stat-label">de precision</span>
+                <div>
+                    <div class="text-2xl font-bold text-violet-600 dark:text-violet-400" id="victory-accuracy">100%</div>
+                    <div class="text-xs text-zinc-400">de precision</div>
                 </div>
             </div>
-            <div id="victory-errors" class="victory-errors"></div>
-            <button class="btn btn-primary btn-lg" id="btn-restart">Recommencer</button>
+            <div id="victory-errors" class="mb-6"></div>
+            <button class="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-medium px-6 py-3 rounded-lg transition-colors" id="btn-restart">Recommencer</button>
         </div>
     </div>
 

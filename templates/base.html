@@ -5,82 +5,94 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Accueil{% endblock %} - Revizio</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+            }
+        }
+    }
+    </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script>
-        (function(){var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
+        (function(){if(localStorage.getItem('theme')==='dark')document.documentElement.classList.add('dark');})();
     </script>
 </head>
-<body>
+<body class="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 font-sans">
 
-    <!-- Burger menu (mobile) -->
-    <button class="burger-btn" id="burger-btn" aria-label="Menu">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+    <!-- Burger (mobile) -->
+    <button class="fixed top-4 left-4 z-50 p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm lg:hidden" id="burger-btn" aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5">
             <path d="M3 12h18M3 6h18M3 18h18"/>
         </svg>
     </button>
 
     <!-- Overlay mobile -->
-    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <div class="fixed inset-0 bg-black/50 z-30 hidden" id="sidebar-overlay"></div>
 
     <!-- Sidebar -->
-    <aside class="sidebar" id="sidebar">
-        <div class="sidebar-logo">
-            <div class="logo-icon">R</div>
-            <span class="logo-text">Revizio</span>
+    <aside class="sidebar fixed top-0 left-0 h-full w-60 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 flex flex-col z-40 transition-transform duration-200 -translate-x-full lg:translate-x-0" id="sidebar">
+        <!-- Logo -->
+        <div class="flex items-center gap-3 px-5 py-5 border-b border-zinc-100 dark:border-zinc-800">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 text-white flex items-center justify-center font-bold text-sm">R</div>
+            <span class="font-semibold text-lg tracking-tight">Revizio</span>
         </div>
 
-        <nav class="sidebar-nav">
-            <div class="nav-section-label">Accueil</div>
-            <a class="nav-item {% if active_page == 'home' %}active{% endif %}" href="/">
-                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <!-- Nav -->
+        <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+            <p class="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider px-3 mb-2">Accueil</p>
+            <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {% if active_page == 'home' %}bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50{% else %}text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-50{% endif %}" href="/">
+                <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
                     <polyline points="9 22 9 12 15 12 15 22"/>
                 </svg>
                 <span>Portail</span>
             </a>
 
-            <div class="nav-section-label">Outils</div>
-            <a class="nav-item {% if active_page == 'verbs' %}active{% endif %}" href="/verbes-irreguliers/">
-                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <p class="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider px-3 mt-6 mb-2">Outils</p>
+            <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {% if active_page == 'verbs' %}bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50{% else %}text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-50{% endif %}" href="/verbes-irreguliers/">
+                <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
                     <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
                 </svg>
                 <span>Verbes Irreguliers</span>
             </a>
 
-            <div class="nav-section-label">Suivi</div>
-            <a class="nav-item {% if active_page == 'suivi' %}active{% endif %}" href="/suivi">
-                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <p class="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider px-3 mt-6 mb-2">Suivi</p>
+            <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {% if active_page == 'suivi' %}bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50{% else %}text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-50{% endif %}" href="/suivi">
+                <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
                 </svg>
                 <span>Suivi global</span>
             </a>
-            <a class="nav-item {% if active_page == 'verbs_suivi' %}active{% endif %}" href="/verbes-irreguliers/suivi">
-                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors {% if active_page == 'verbs_suivi' %}bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50{% else %}text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-50{% endif %}" href="/verbes-irreguliers/suivi">
+                <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                 </svg>
                 <span>Suivi Verbes</span>
             </a>
         </nav>
 
-        <div class="sidebar-footer">
-            <div class="sidebar-bottom-row">
-                <span class="sidebar-version">v{{ app_version }}</span>
-                <button class="theme-toggle" id="btn-theme">
-                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                        <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-                    </svg>
-                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                    </svg>
-                </button>
-            </div>
+        <!-- Footer -->
+        <div class="px-5 py-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+            <span class="text-xs text-zinc-400">v{{ app_version }}</span>
+            <button class="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300" id="btn-theme" aria-label="Changer de theme">
+                <svg class="w-4 h-4 block dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+                <svg class="w-4 h-4 hidden dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                </svg>
+            </button>
         </div>
     </aside>
 
-    <!-- Contenu principal -->
-    <main class="main-content">
+    <!-- Main content -->
+    <main class="lg:ml-60 min-h-screen p-6 lg:p-8">
         {% block content %}{% endblock %}
     </main>
 

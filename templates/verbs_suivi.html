@@ -3,98 +3,97 @@
 {% block title %}Suivi - Verbes Irreguliers{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>Suivi — Verbes Irreguliers</h1>
-</div>
+<div class="max-w-4xl">
+    <div class="mb-8">
+        <h1 class="text-2xl font-bold tracking-tight">Suivi — Verbes Irreguliers</h1>
+    </div>
 
-<!-- Stats -->
-<div class="suivi-stats">
-    <div class="stat-card">
-        <span class="stat-card-value">{{ total_sessions }}</span>
-        <span class="stat-card-label">session{{ 's' if total_sessions != 1 }}</span>
-    </div>
-    <div class="stat-card">
-        <span class="stat-card-value">{{ avg_accuracy }}%</span>
-        <span class="stat-card-label">precision moy.</span>
-    </div>
-    <div class="stat-card">
-        <span class="stat-card-value">{{ avg_rounds }}</span>
-        <span class="stat-card-label">rounds moy.</span>
-    </div>
-</div>
-
-{% if hard_verbs %}
-<!-- Verbes les plus difficiles -->
-<div class="suivi-section">
-    <h2 class="section-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
-        Verbes les plus difficiles
-    </h2>
-    <div class="hard-verbs-list">
-        {% for v in hard_verbs %}
-        <div class="hard-verb-row">
-            <div class="hard-verb-info">
-                <span class="hard-verb-name">{{ v.infinitive }}</span>
-                <span class="hard-verb-french">{{ v.french }}</span>
-            </div>
-            <div class="hard-verb-details">
-                <span class="hard-verb-forms">{{ v.past_simple }} / {{ v.past_participle }}</span>
-                <span class="hard-verb-count">{{ v.total_errors }} erreur{{ 's' if v.total_errors != 1 }} sur {{ v.sessions_with_error }} session{{ 's' if v.sessions_with_error != 1 }}</span>
-            </div>
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4 mb-8">
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 text-center">
+            <div class="text-2xl font-bold">{{ total_sessions }}</div>
+            <div class="text-xs text-zinc-400 mt-1">session{{ 's' if total_sessions != 1 }}</div>
         </div>
-        {% endfor %}
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 text-center">
+            <div class="text-2xl font-bold">{{ avg_accuracy }}%</div>
+            <div class="text-xs text-zinc-400 mt-1">precision moy.</div>
+        </div>
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 text-center">
+            <div class="text-2xl font-bold">{{ avg_rounds }}</div>
+            <div class="text-xs text-zinc-400 mt-1">rounds moy.</div>
+        </div>
     </div>
-</div>
-{% endif %}
 
-<!-- Historique des sessions -->
-<div class="suivi-section">
-    <h2 class="section-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-        </svg>
-        Historique des sessions
-    </h2>
-
-    {% if sessions %}
-    <div class="sessions-list">
-        {% for s in sessions %}
-        <div class="session-card">
-            <div class="session-header">
-                <div class="session-date">
-                    {{ s.started_at[:10] }} a {{ s.started_at[11:16] }}
+    {% if hard_verbs %}
+    <!-- Verbes les plus difficiles -->
+    <div class="mb-8">
+        <h2 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <svg class="w-5 h-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            Verbes les plus difficiles
+        </h2>
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800">
+            {% for v in hard_verbs %}
+            <div class="flex items-center justify-between p-4">
+                <div>
+                    <span class="font-medium text-sm">{{ v.infinitive }}</span>
+                    <span class="text-sm text-zinc-400 ml-2">{{ v.french }}</span>
                 </div>
-                <div class="session-accuracy accuracy-{{ 'good' if s.accuracy >= 80 else ('medium' if s.accuracy >= 50 else 'bad') }}">
-                    {{ s.accuracy }}%
+                <div class="text-right">
+                    <div class="text-sm text-zinc-500 dark:text-zinc-400">{{ v.past_simple }} / {{ v.past_participle }}</div>
+                    <div class="text-xs text-zinc-400">{{ v.total_errors }} erreur{{ 's' if v.total_errors != 1 }} sur {{ v.sessions_with_error }} session{{ 's' if v.sessions_with_error != 1 }}</div>
                 </div>
             </div>
-            <div class="session-details">
-                <span>{{ s.total_correct }} correct{{ 's' if s.total_correct != 1 }}</span>
-                <span class="sep">&middot;</span>
-                <span>{{ s.total_errors }} erreur{{ 's' if s.total_errors != 1 }}</span>
-                <span class="sep">&middot;</span>
-                <span>{{ s.rounds }} round{{ 's' if s.rounds != 1 }}</span>
-            </div>
-            {% if s.error_verbs %}
-            <div class="session-errors">
-                {% for e in s.error_verbs %}
-                <span class="error-tag" title="{{ e.error_count }} erreur{{ 's' if e.error_count != 1 }}">
-                    {{ e.infinitive }}
-                    {% if e.error_count > 1 %}<small>&times;{{ e.error_count }}</small>{% endif %}
-                </span>
-                {% endfor %}
-            </div>
-            {% endif %}
+            {% endfor %}
         </div>
-        {% endfor %}
-    </div>
-    {% else %}
-    <div class="empty-state">
-        <p>Aucune session terminee pour l'instant.</p>
     </div>
     {% endif %}
+
+    <!-- Historique des sessions -->
+    <div>
+        <h2 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <svg class="w-5 h-5 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Historique des sessions
+        </h2>
+
+        {% if sessions %}
+        <div class="space-y-3">
+            {% for s in sessions %}
+            <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm text-zinc-500 dark:text-zinc-400">{{ s.started_at[:10] }} a {{ s.started_at[11:16] }}</span>
+                    <span class="text-xs font-medium px-2 py-0.5 rounded-full {% if s.accuracy >= 80 %}bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400{% elif s.accuracy >= 50 %}bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400{% else %}bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400{% endif %}">
+                        {{ s.accuracy }}%
+                    </span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-zinc-400">
+                    <span>{{ s.total_correct }} correct{{ 's' if s.total_correct != 1 }}</span>
+                    <span>&middot;</span>
+                    <span>{{ s.total_errors }} erreur{{ 's' if s.total_errors != 1 }}</span>
+                    <span>&middot;</span>
+                    <span>{{ s.rounds }} round{{ 's' if s.rounds != 1 }}</span>
+                </div>
+                {% if s.error_verbs %}
+                <div class="flex flex-wrap gap-1.5 mt-3">
+                    {% for e in s.error_verbs %}
+                    <span class="text-xs bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full" title="{{ e.error_count }} erreur{{ 's' if e.error_count != 1 }}">
+                        {{ e.infinitive }}{% if e.error_count > 1 %} &times;{{ e.error_count }}{% endif %}
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 text-center">
+            <p class="text-sm text-zinc-400">Aucune session terminee pour l'instant.</p>
+        </div>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}

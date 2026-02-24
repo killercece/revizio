@@ -1,6 +1,6 @@
 /**
  * Revizio - Core
- * Theme toggle, burger menu et utilitaires partages.
+ * Theme toggle (class-based pour Tailwind), burger menu.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -16,17 +16,23 @@ document.addEventListener('DOMContentLoaded', () => {
  */
 function initTheme() {
     const theme = localStorage.getItem('theme') || 'light';
-    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+    }
 }
 
 /**
- * Bascule entre theme clair et sombre.
+ * Bascule entre theme clair et sombre (class "dark" sur <html>).
  */
 function toggleTheme() {
-    const current = document.documentElement.getAttribute('data-theme');
-    const next = current === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('theme', next);
+    const isDark = document.documentElement.classList.contains('dark');
+    if (isDark) {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+    } else {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+    }
 }
 
 /**
@@ -41,11 +47,11 @@ function initBurgerMenu() {
 
     burger.addEventListener('click', () => {
         sidebar.classList.toggle('open');
-        overlay.classList.toggle('active');
+        overlay.classList.toggle('hidden');
     });
 
     overlay.addEventListener('click', () => {
         sidebar.classList.remove('open');
-        overlay.classList.remove('active');
+        overlay.classList.add('hidden');
     });
 }
