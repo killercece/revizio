@@ -1,10 +1,10 @@
 /* === Variables & Theme === */
 :root {
-    --bg: #f0f4ff;
+    --bg: #f5f7fb;
     --card: #ffffff;
     --text: #2d3748;
     --text-light: #718096;
-    --border: #e2e8f0;
+    --border: #e8ecf4;
     --primary: #667eea;
     --primary-dark: #5a67d8;
     --primary-light: #eef2ff;
@@ -14,6 +14,7 @@
     --danger-light: #fee2e2;
     --warning: #f59e0b;
     --warning-light: #fef3c7;
+    --sidebar-bg: #ffffff;
     --gradient: linear-gradient(135deg, #667eea, #764ba2);
     --shadow: 0 2px 8px rgba(0,0,0,0.04), 0 4px 24px rgba(0,0,0,0.06);
     --shadow-hover: 0 4px 12px rgba(0,0,0,0.08), 0 8px 32px rgba(0,0,0,0.1);
@@ -31,6 +32,7 @@
     --success-light: rgba(16, 185, 129, 0.15);
     --danger-light: rgba(239, 68, 68, 0.15);
     --warning-light: rgba(245, 158, 11, 0.15);
+    --sidebar-bg: #1e293b;
     --shadow: 0 2px 8px rgba(0,0,0,0.3), 0 4px 24px rgba(0,0,0,0.4);
 }
 
@@ -49,45 +51,46 @@ body {
     transition: background 0.3s, color 0.3s;
 }
 
-/* === App Container === */
-.app-container {
-    max-width: 600px;
-    margin: 0 auto;
-    padding: 16px;
-    min-height: 100vh;
+/* === Sidebar === */
+.sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 240px;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
+    z-index: 100;
+    overflow-y: auto;
+    transition: transform 0.3s;
 }
 
-/* === Header === */
-.app-header {
+.sidebar-logo {
+    padding: 24px;
+    margin-bottom: 8px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 12px 0;
-    margin-bottom: 16px;
+    gap: 12px;
 }
 
-.header-left {
+.logo-icon {
+    width: 44px;
+    height: 44px;
+    background: var(--gradient);
+    border-radius: 14px;
     display: flex;
     align-items: center;
-    gap: 10px;
-}
-
-.header-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.header-icon {
-    width: 28px;
-    height: 28px;
-    color: var(--primary);
-}
-
-.app-header h1 {
+    justify-content: center;
+    color: white;
     font-size: 20px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.logo-text {
+    font-size: 18px;
     font-weight: 700;
     background: var(--gradient);
     -webkit-background-clip: text;
@@ -95,23 +98,159 @@ body {
     background-clip: text;
 }
 
-.back-link {
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-sm);
-    background: var(--card);
+.sidebar-nav {
+    flex: 1;
+    padding: 0 12px;
+    overflow-y: auto;
+}
+
+.nav-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
     color: var(--text-light);
+    padding: 16px 16px 8px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 2px;
+    text-decoration: none;
+}
+
+.nav-item:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.nav-item.active {
+    background: var(--gradient);
+    color: white;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.35);
+}
+
+.nav-item.active .nav-icon {
+    color: white;
+}
+
+.nav-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    color: var(--text-light);
+    transition: color 0.2s;
+}
+
+.nav-item:hover .nav-icon {
+    color: var(--primary);
+}
+
+.sidebar-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+}
+
+.sidebar-bottom-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sidebar-version {
+    font-size: 11px;
+    color: var(--text-light);
+}
+
+.theme-toggle {
     display: flex;
     align-items: center;
     justify-content: center;
-    text-decoration: none;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 8px;
+    border: none;
+    background: var(--bg);
+    color: var(--text-light);
     transition: all 0.2s;
-    box-shadow: var(--shadow);
 }
 
-.back-link:hover {
+.theme-toggle:hover {
+    background: var(--primary-light);
     color: var(--primary);
-    transform: scale(1.05);
+}
+
+[data-theme="dark"] .icon-sun { display: block; }
+[data-theme="dark"] .icon-moon { display: none; }
+.icon-sun { display: none; }
+.icon-moon { display: block; }
+
+/* === Burger menu (mobile) === */
+.burger-btn {
+    display: none;
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 200;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 12px;
+    background: var(--card);
+    color: var(--text);
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow);
+    transition: all 0.2s;
+}
+
+.burger-btn:hover {
+    color: var(--primary);
+}
+
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 90;
+}
+
+.sidebar-overlay.active {
+    display: block;
+}
+
+/* === Main Content === */
+.main-content {
+    margin-left: 240px;
+    padding: 32px;
+    min-height: 100vh;
+}
+
+/* === Page Headers === */
+.page-header {
+    margin-bottom: 24px;
+}
+
+.page-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.page-header p {
+    font-size: 14px;
+    color: var(--text-light);
+    margin-top: 4px;
 }
 
 /* === Boutons === */
@@ -176,7 +315,6 @@ body {
     justify-content: center;
     transition: all 0.2s;
     box-shadow: var(--shadow);
-    text-decoration: none;
 }
 
 .btn-icon:hover {
@@ -200,57 +338,11 @@ body {
     height: 16px;
 }
 
-/* Theme toggle */
-[data-theme="dark"] .icon-sun { display: block; }
-[data-theme="dark"] .icon-moon { display: none; }
-.icon-sun { display: none; }
-.icon-moon { display: block; }
-
-/* === Ecrans === */
-.screen {
-    display: none;
-    flex: 1;
-    animation: fadeIn 0.3s ease;
-}
-
-.screen.active {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* === Portail === */
-.portal-container {
-    max-width: 700px;
-}
-
-.portal-welcome {
-    text-align: center;
-    margin-bottom: 24px;
-}
-
-.portal-welcome h2 {
-    font-size: 22px;
-    font-weight: 700;
-    margin-bottom: 4px;
-}
-
-.portal-welcome p {
-    font-size: 14px;
-    color: var(--text-light);
-}
-
+/* === Portail — Grille outils === */
 .tools-grid {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 16px;
-    width: 100%;
 }
 
 .tool-card {
@@ -309,7 +401,34 @@ body {
     margin: 0 4px;
 }
 
-/* === Ecran d'accueil (quiz) === */
+/* === Quiz — Ecrans === */
+.quiz-container {
+    max-width: 600px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 64px);
+}
+
+.screen {
+    display: none;
+    flex: 1;
+    animation: fadeIn 0.3s ease;
+}
+
+.screen.active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* === Quiz — Ecran d'accueil === */
 .start-card {
     background: var(--card);
     border-radius: 24px;
@@ -338,7 +457,6 @@ body {
     color: var(--text-light);
 }
 
-/* Resume section */
 .resume-section {
     margin-top: 16px;
 }
@@ -366,9 +484,10 @@ body {
     color: var(--text-light);
 }
 
-/* === Quiz === */
+/* === Quiz — Progression === */
 .quiz-progress {
     width: 100%;
+    max-width: 600px;
     margin-bottom: 20px;
 }
 
@@ -419,57 +538,16 @@ body {
     font-weight: 600;
 }
 
-.score-correct::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--success);
-    margin-right: 6px;
-}
-
-.score-wrong::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--danger);
-    margin-right: 6px;
-}
-
-/* Quiz Card */
+/* === Quiz — Card === */
 .quiz-card {
     background: var(--card);
     border-radius: 24px;
     padding: 32px;
     box-shadow: var(--shadow);
     width: 100%;
+    max-width: 600px;
     text-align: center;
     transition: transform 0.2s;
-}
-
-.quiz-card.shake {
-    animation: shake 0.4s ease;
-}
-
-@keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    20% { transform: translateX(-8px); }
-    40% { transform: translateX(8px); }
-    60% { transform: translateX(-4px); }
-    80% { transform: translateX(4px); }
-}
-
-.quiz-card.correct-flash {
-    animation: correctFlash 0.5s ease;
-}
-
-@keyframes correctFlash {
-    0% { box-shadow: var(--shadow); }
-    50% { box-shadow: 0 0 0 4px var(--success), var(--shadow); }
-    100% { box-shadow: var(--shadow); }
 }
 
 .quiz-prompt {
@@ -505,7 +583,6 @@ body {
     display: none;
 }
 
-/* Quiz Fields */
 .quiz-fields {
     display: flex;
     flex-direction: column;
@@ -543,36 +620,12 @@ body {
     box-shadow: 0 0 0 4px var(--primary-light);
 }
 
-.field-group input.correct {
-    border-color: var(--success);
-    background: var(--success-light);
-    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
-}
-
-.field-group input.wrong {
-    border-color: var(--danger);
-    background: var(--danger-light);
-    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1);
-}
-
 .field-group input:disabled {
     opacity: 0.8;
     cursor: not-allowed;
 }
 
-.field-correction {
-    font-size: 13px;
-    color: var(--danger);
-    margin-top: 4px;
-    font-weight: 500;
-}
-
-.field-correction span {
-    color: var(--success);
-    font-weight: 600;
-}
-
-/* === Ecran fin de round === */
+/* === Quiz — Fin de round === */
 .result-card {
     background: var(--card);
     border-radius: 24px;
@@ -618,16 +671,6 @@ body {
     margin-bottom: 24px;
 }
 
-.retry-verb-tag {
-    background: var(--danger-light);
-    color: var(--danger);
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 500;
-}
-
-/* === Retry verbs (fin de round) === */
 .retry-verb-row {
     display: flex;
     flex-direction: column;
@@ -651,7 +694,7 @@ body {
     color: var(--primary);
 }
 
-/* === Ecran victoire === */
+/* === Quiz — Victoire === */
 .victory-card {
     background: var(--card);
     border-radius: 24px;
@@ -1047,15 +1090,38 @@ body {
 }
 
 /* === Responsive === */
-@media (min-width: 500px) {
-    .tools-grid {
-        grid-template-columns: repeat(2, 1fr);
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
     }
-}
 
-@media (max-width: 480px) {
-    .app-container {
-        padding: 12px;
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    .burger-btn {
+        display: flex;
+    }
+
+    .main-content {
+        margin-left: 0;
+        padding: 68px 16px 16px;
+    }
+
+    .tools-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .suivi-stats {
+        gap: 8px;
+    }
+
+    .stat-card {
+        padding: 12px 8px;
+    }
+
+    .stat-card-value {
+        font-size: 20px;
     }
 
     .start-card,
@@ -1076,18 +1142,6 @@ body {
 
     .stat-value {
         font-size: 24px;
-    }
-
-    .suivi-stats {
-        gap: 8px;
-    }
-
-    .stat-card {
-        padding: 12px 8px;
-    }
-
-    .stat-card-value {
-        font-size: 20px;
     }
 }
 

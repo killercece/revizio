@@ -1,35 +1,9 @@
+{% set active_page = 'verbs' %}
 {% extends "base.html" %}
 {% block title %}Verbes Irreguliers{% endblock %}
 
 {% block content %}
-<div class="app-container">
-
-    <!-- Header -->
-    <header class="app-header">
-        <div class="header-left">
-            <a href="/" class="back-link" title="Retour au portail">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-                    <path d="M19 12H5M12 19l-7-7 7-7"/>
-                </svg>
-            </a>
-            <h1>Verbes Irreguliers</h1>
-        </div>
-        <div class="header-right">
-            <a href="/verbes-irreguliers/suivi" class="btn-icon" title="Suivi parental">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
-                </svg>
-            </a>
-            <button class="btn-icon" id="btn-theme" title="Theme">
-                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-                </svg>
-                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-            </button>
-        </div>
-    </header>
+<div class="quiz-container">
 
     <!-- Ecran d'accueil -->
     <div id="screen-start" class="screen active">
@@ -69,8 +43,8 @@
                 <div class="progress-fill" id="progress-fill"></div>
             </div>
             <div class="score-info">
-                <span class="score-correct" id="score-correct"></span>
-                <span class="score-wrong" id="score-wrong"></span>
+                <span id="score-correct"></span>
+                <span id="score-wrong"></span>
                 <button class="btn-icon btn-icon-sm" id="btn-pause" title="Pause">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
@@ -85,9 +59,7 @@
                 <span class="prompt-value" id="prompt-value">aller</span>
                 <span class="prompt-hint" id="prompt-hint"></span>
             </div>
-            <div class="quiz-fields" id="quiz-fields">
-                <!-- Champs generes dynamiquement -->
-            </div>
+            <div class="quiz-fields" id="quiz-fields"></div>
             <button class="btn btn-primary" id="btn-validate">Valider</button>
         </div>
     </div>
@@ -95,7 +67,7 @@
     <!-- Ecran fin de round -->
     <div id="screen-round-end" class="screen">
         <div class="result-card">
-            <div class="result-icon" id="round-result-icon">
+            <div class="result-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
                     <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
                     <path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>

@@ -3,7 +3,7 @@ Application Flask - Revizio
 Portail de revision multi-outils pour le college.
 """
 
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 
 from flask import Flask, render_template, jsonify, request, g
 import sqlite3
@@ -23,6 +23,12 @@ logger = logging.getLogger(__name__)
 # Initialiser Flask
 app = Flask(__name__)
 app.secret_key = 'revizio-portal-secret-key'
+
+
+@app.context_processor
+def inject_globals():
+    """Injecte les variables globales dans tous les templates."""
+    return {'app_version': __version__, 'tools': TOOLS}
 
 # Configuration base de donnees
 DB_PATH = Path('data/app.db')
