@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Verbes Irreguliers{% endblock %}
+
+{% block content %}
+<div class="app-container">
+
+    <!-- Header -->
+    <header class="app-header">
+        <div class="header-left">
+            <a href="/" class="back-link" title="Retour au portail">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </a>
+            <h1>Verbes Irreguliers</h1>
+        </div>
+        <div class="header-right">
+            <a href="/verbes-irreguliers/suivi" class="btn-icon" title="Suivi parental">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>
+                </svg>
+            </a>
+            <button class="btn-icon" id="btn-theme" title="Theme">
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                </svg>
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Ecran d'accueil -->
+    <div id="screen-start" class="screen active">
+        <div class="start-card">
+            <div class="start-header">
+                <h2>Revise tes verbes irreguliers</h2>
+                <p class="subtitle">Entraine-toi jusqu'a les connaitre tous par coeur !</p>
+            </div>
+            <button class="btn btn-primary btn-lg" id="btn-start">
+                Commencer
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+            </button>
+            <div id="resume-section" class="resume-section" style="display:none;">
+                <div class="resume-divider"><span>ou</span></div>
+                <button class="btn btn-ghost btn-lg" id="btn-resume">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                    Reprendre la session
+                </button>
+                <p class="resume-info" id="resume-info"></p>
+            </div>
+            <p class="verb-count-info" id="verb-count-info"></p>
+        </div>
+    </div>
+
+    <!-- Ecran du quiz -->
+    <div id="screen-quiz" class="screen">
+        <div class="quiz-progress">
+            <div class="progress-info">
+                <span class="round-badge" id="round-badge">Round 1</span>
+                <span class="progress-text" id="progress-text">Verbe 1 / 53</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <div class="score-info">
+                <span class="score-correct" id="score-correct"></span>
+                <span class="score-wrong" id="score-wrong"></span>
+                <button class="btn-icon btn-icon-sm" id="btn-pause" title="Pause">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="quiz-card" id="quiz-card">
+            <div class="quiz-prompt">
+                <span class="prompt-label" id="prompt-label">Francais</span>
+                <span class="prompt-value" id="prompt-value">aller</span>
+                <span class="prompt-hint" id="prompt-hint"></span>
+            </div>
+            <div class="quiz-fields" id="quiz-fields">
+                <!-- Champs generes dynamiquement -->
+            </div>
+            <button class="btn btn-primary" id="btn-validate">Valider</button>
+        </div>
+    </div>
+
+    <!-- Ecran fin de round -->
+    <div id="screen-round-end" class="screen">
+        <div class="result-card">
+            <div class="result-icon" id="round-result-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="48" height="48">
+                    <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+                    <path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>
+                </svg>
+            </div>
+            <h2 id="round-result-title">Round 1 termine !</h2>
+            <p class="result-score" id="round-result-score">18 / 20 correct</p>
+            <p class="result-message" id="round-result-message">Plus que 2 verbes a revoir !</p>
+            <div class="retry-verbs" id="retry-verbs-list"></div>
+            <button class="btn btn-primary btn-lg" id="btn-next-round">Round suivant</button>
+        </div>
+    </div>
+
+    <!-- Ecran victoire -->
+    <div id="screen-victory" class="screen">
+        <div class="victory-card">
+            <div class="victory-stars">
+                <span class="star">&#9733;</span>
+                <span class="star big">&#9733;</span>
+                <span class="star">&#9733;</span>
+            </div>
+            <h2>Bravo !</h2>
+            <p class="victory-subtitle">Tu connais tous tes verbes !</p>
+            <div class="victory-stats">
+                <div class="stat-item">
+                    <span class="stat-value" id="victory-rounds">1</span>
+                    <span class="stat-label">round(s)</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="victory-correct">20</span>
+                    <span class="stat-label">bonnes reponses</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value" id="victory-accuracy">100%</span>
+                    <span class="stat-label">de precision</span>
+                </div>
+            </div>
+            <div id="victory-errors" class="victory-errors"></div>
+            <button class="btn btn-primary btn-lg" id="btn-restart">Recommencer</button>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/verbs.js') }}"></script>
+{% endblock %}

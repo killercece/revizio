@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Suivi global{% endblock %}
+
+{% block content %}
+<div class="app-container">
+
+    <!-- Header -->
+    <header class="app-header">
+        <div class="header-left">
+            <a href="/" class="back-link" title="Retour au portail">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </a>
+            <h1>Suivi global</h1>
+        </div>
+        <button class="btn-icon" id="btn-theme" title="Theme">
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+        </button>
+    </header>
+
+    <!-- Stats globales -->
+    <div class="suivi-stats">
+        <div class="stat-card">
+            <span class="stat-card-value">{{ total_sessions }}</span>
+            <span class="stat-card-label">session{{ 's' if total_sessions != 1 }} au total</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-card-value">{{ avg_accuracy }}%</span>
+            <span class="stat-card-label">precision moy.</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-card-value">{{ avg_rounds }}</span>
+            <span class="stat-card-label">rounds moy.</span>
+        </div>
+    </div>
+
+    <!-- Outils -->
+    <div class="suivi-section">
+        <h2 class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+            Par outil
+        </h2>
+        <div class="tool-breakdown">
+            {% for tool in tool_stats %}
+            <a href="{{ tool.suivi_url }}" class="tool-summary-card">
+                <div class="tool-summary-icon">
+                    {% if tool.icon == 'book' %}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+                        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+                    </svg>
+                    {% else %}
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                    </svg>
+                    {% endif %}
+                </div>
+                <div class="tool-summary-info">
+                    <div class="tool-summary-name">{{ tool.name }}</div>
+                    <div class="tool-summary-stats">
+                        {% if tool.stats.total_sessions > 0 %}
+                        {{ tool.stats.total_sessions }} session{{ 's' if tool.stats.total_sessions != 1 }}
+                        &middot; {{ tool.stats.avg_accuracy }}% de precision
+                        {% else %}
+                        Aucune session
+                        {% endif %}
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}
