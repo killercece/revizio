@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" role="img" aria-labelledby="title desc">
+  <title id="title">France - Fleuves</title>
+  <desc id="desc">Silhouette schematique de la France metropolitaine avec cinq fleuves numerotes de 1 a 5 : Seine, Loire, Garonne, Rhone et Rhin.</desc>
+  <!-- Silhouette hexagonale de la France -->
+  <path d="M150 40 L210 50 L255 95 L300 110 L315 170 L295 230 L300 300 L240 345 L170 350 L120 320 L70 270 L65 200 L95 140 L110 80 Z"
+        fill="#eef3f7" stroke="#3a4a5a" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- Fleuves -->
+  <!-- 1 Seine : nord vers Paris / Le Havre -->
+  <path d="M210 120 Q175 130 150 105 Q130 88 110 92" fill="none" stroke="#2b6cb0" stroke-width="3"/>
+  <!-- 2 Loire : centre-ouest, le plus long -->
+  <path d="M255 230 Q200 215 160 230 Q110 245 80 220" fill="none" stroke="#2b6cb0" stroke-width="3"/>
+  <!-- 3 Garonne : sud-ouest vers Bordeaux -->
+  <path d="M230 290 Q180 290 140 310 Q115 322 100 310" fill="none" stroke="#2b6cb0" stroke-width="3"/>
+  <!-- 4 Rhone : sud-est, Lyon vers Mediterranee -->
+  <path d="M255 175 Q265 230 250 290 Q245 320 230 340" fill="none" stroke="#2b6cb0" stroke-width="3"/>
+  <!-- 5 Rhin : est, frontiere -->
+  <path d="M300 130 Q295 175 290 220" fill="none" stroke="#2b6cb0" stroke-width="3"/>
+
+  <!-- Numeros -->
+  <g font-family="sans-serif" font-weight="bold" font-size="16" text-anchor="middle">
+    <circle cx="118" cy="96" r="13" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="118" y="101" fill="#1a3a5a">1</text>
+    <circle cx="88" cy="218" r="13" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="88" y="223" fill="#1a3a5a">2</text>
+    <circle cx="104" cy="312" r="13" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="104" y="317" fill="#1a3a5a">3</text>
+    <circle cx="232" cy="338" r="13" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="232" y="343" fill="#1a3a5a">4</text>
+    <circle cx="290" cy="222" r="13" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+    <text x="290" y="227" fill="#1a3a5a">5</text>
+  </g>
+</svg>

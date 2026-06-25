@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" role="img" aria-labelledby="title desc">
+  <title id="title">France - Reliefs</title>
+  <desc id="desc">Silhouette schematique de la France metropolitaine avec cinq zones de relief numerotees de 1 a 5 : Massif central, Alpes, Pyrenees, Jura et Vosges, figurees par des triangles de montagne. La Corse, ile montagneuse au sud-est, porte le numero 6.</desc>
+  <path d="M150 40 L210 50 L255 95 L300 110 L315 170 L295 230 L300 300 L240 345 L170 350 L120 320 L70 270 L65 200 L95 140 L110 80 Z"
+        fill="#eef3f7" stroke="#3a4a5a" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- Corse : ile montagneuse au sud-est -->
+  <path d="M338 318 L350 310 L356 352 L344 372 L334 348 Z" fill="#eef3f7" stroke="#3a4a5a" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- Figure montagne reutilisable : groupes de triangles -->
+  <defs>
+    <g id="mts" fill="#8a6d3b" stroke="#5a4520" stroke-width="1">
+      <polygon points="-14,8 -6,-9 2,8"/>
+      <polygon points="-2,8 7,-12 16,8"/>
+      <polygon points="9,8 16,-6 23,8"/>
+    </g>
+  </defs>
+
+  <!-- 1 Massif central (centre) -->
+  <use href="#mts" x="165" y="225"/>
+  <use href="#mts" x="185" y="240" transform="scale(0.85)" transform-origin="185 240"/>
+  <!-- 2 Alpes (sud-est) -->
+  <use href="#mts" x="262" y="220"/>
+  <use href="#mts" x="270" y="245"/>
+  <!-- 3 Pyrenees (sud) -->
+  <use href="#mts" x="150" y="320"/>
+  <use href="#mts" x="180" y="320"/>
+  <!-- 4 Jura (est) -->
+  <use href="#mts" x="280" y="180" transform="scale(0.8)" transform-origin="280 180"/>
+  <!-- 5 Vosges (nord-est) -->
+  <use href="#mts" x="278" y="125" transform="scale(0.8)" transform-origin="278 125"/>
+  <!-- 6 Corse (montagneuse) -->
+  <use href="#mts" x="345" y="340" transform="scale(0.7)" transform-origin="345 340"/>
+
+  <!-- Numeros -->
+  <g font-family="sans-serif" font-weight="bold" font-size="16" text-anchor="middle">
+    <circle cx="180" cy="205" r="13" fill="#ffffff" stroke="#5a4520" stroke-width="2"/>
+    <text x="180" y="210" fill="#5a4520">1</text>
+    <circle cx="278" cy="200" r="13" fill="#ffffff" stroke="#5a4520" stroke-width="2"/>
+    <text x="278" y="205" fill="#5a4520">2</text>
+    <circle cx="168" cy="305" r="13" fill="#ffffff" stroke="#5a4520" stroke-width="2"/>
+    <text x="168" y="310" fill="#5a4520">3</text>
+    <circle cx="300" cy="162" r="13" fill="#ffffff" stroke="#5a4520" stroke-width="2"/>
+    <text x="300" y="167" fill="#5a4520">4</text>
+    <circle cx="298" cy="110" r="13" fill="#ffffff" stroke="#5a4520" stroke-width="2"/>
+    <text x="298" y="115" fill="#5a4520">5</text>
+    <circle cx="345" cy="340" r="13" fill="#ffffff" stroke="#5a4520" stroke-width="2"/>
+    <text x="345" y="345" fill="#5a4520">6</text>
+  </g>
+</svg>

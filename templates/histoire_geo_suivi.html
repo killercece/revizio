@@ -1,0 +1,247 @@
+{% set active_page = 'histoire_geo_suivi' %}
+{% extends "base.html" %}
+{% block title %}Suivi - Histoire-Géo{% endblock %}
+
+{#
+  Variables de template attendues (a fournir par le backend) :
+
+  total_sessions   : int   -> nombre de sessions terminees
+  avg_accuracy     : int   -> precision moyenne en % (entier)
+
+  sessions         : liste de sessions, chacune avec :
+      started_at    : str ISO ("YYYY-MM-DDTHH:MM:SS...")
+      completed_at  : str ISO (peut etre None)
+      accuracy      : int  -> precision de la session en %
+      total_correct : int  (optionnel, sinon deduit de answers)
+      total_errors  : int  (optionnel)
+      rounds        : int  -> nombre de questions
+      answers       : liste de reponses, chacune avec :
+          theme          : str  -> intitule du theme
+          question       : str
+          student_answer : str  -> reponse de l'eleve
+          correct        : bool
+          note           : str  -> "x/5"
+          feedback       : str  -> appreciation du prof
+          correction     : str  -> correction detaillee
+
+  hard_themes      : liste des themes les plus rates, chacun avec :
+      intitule    : str  -> intitule du theme
+      matiere     : str  -> "Histoire" / "Geographie" (optionnel)
+      error_count : int  -> nombre d'erreurs sur ce theme
+
+  theme_progress   : progression par theme, TRIEE des themes les plus faibles
+                     aux plus forts (accuracy_global croissante). Chacun avec :
+      intitule         : str  -> intitule du theme
+      matiere          : str  -> "Histoire" / "Geographie" (optionnel)
+      attempts         : int  -> nombre de tentatives (questions) sur ce theme
+      accuracy_global  : int  -> precision globale en % sur le theme
+      history          : liste chronologique de points, chacun avec :
+          date     : str ISO -> date de la session
+          accuracy : int     -> precision (%) a cette date
+      (la sparkline est tracee a partir de history[].accuracy ; la tendance
+       est deduite du premier vs dernier point.)
+#}
+
+{% block content %}
+<div class="max-w-4xl">
+    <div class="mb-8">
+        <h1 class="text-2xl font-bold tracking-tight">Suivi — Histoire-Géo</h1>
+    </div>
+
+    <!-- Stats globales -->
+    <div class="grid grid-cols-2 gap-4 mb-8">
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 text-center">
+            <div class="text-2xl font-bold">{{ total_sessions }}</div>
+            <div class="text-xs text-zinc-400 mt-1">session{{ 's' if total_sessions != 1 }}</div>
+        </div>
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 text-center">
+            <div class="text-2xl font-bold">{{ avg_accuracy }}%</div>
+            <div class="text-xs text-zinc-400 mt-1">precision moy.</div>
+        </div>
+    </div>
+
+    <!-- Progression par theme (sparklines SVG) -->
+    <div class="mb-8">
+        <h2 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <svg class="w-5 h-5 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-3 3"/>
+            </svg>
+            Progression par thème
+        </h2>
+
+        {% if theme_progress %}
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800">
+            {% for t in theme_progress %}
+            {#- Tendance : compare le premier et le dernier point d'historique -#}
+            {% set first_acc = t.history[0].accuracy if t.history else t.accuracy_global %}
+            {% set last_acc = t.history[-1].accuracy if t.history else t.accuracy_global %}
+            {% set trend = last_acc - first_acc %}
+            <div class="flex items-center justify-between gap-4 p-4">
+                <div class="min-w-0">
+                    <div class="font-medium text-sm truncate">{{ t.intitule }}</div>
+                    <div class="text-xs text-zinc-400">
+                        {% if t.matiere %}{{ t.matiere }} &middot; {% endif %}{{ t.attempts }} tentative{{ 's' if t.attempts != 1 }}
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4 flex-shrink-0">
+                    <!-- Sparkline SVG (viewBox 100 x 28) -->
+                    <svg viewBox="0 0 100 28" preserveAspectRatio="none" class="w-24 h-7 overflow-visible" aria-hidden="true">
+                        {% if t.history and t.history | length > 1 %}
+                            {%- set n = t.history | length -%}
+                            {%- set pts = [] -%}
+                            {%- for h in t.history -%}
+                                {#- x reparti sur 0..100, y inverse (0% en bas, 100% en haut), marge 2px -#}
+                                {%- set x = (loop.index0 / (n - 1) * 100) | round(2) -%}
+                                {%- set y = (26 - (h.accuracy / 100 * 24)) | round(2) -%}
+                                {%- set _ = pts.append(x ~ ',' ~ y) -%}
+                            {%- endfor -%}
+                            <polyline points="{{ pts | join(' ') }}" fill="none"
+                                      stroke="{% if trend > 0 %}#10b981{% elif trend < 0 %}#ef4444{% else %}#a1a1aa{% endif %}"
+                                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            {#- Dernier point mis en evidence -#}
+                            {%- set lx = 100 -%}
+                            {%- set ly = (26 - (last_acc / 100 * 24)) | round(2) -%}
+                            <circle cx="{{ lx }}" cy="{{ ly }}" r="2.5"
+                                    fill="{% if trend > 0 %}#10b981{% elif trend < 0 %}#ef4444{% else %}#a1a1aa{% endif %}"/>
+                        {% else %}
+                            {#- Un seul point (ou aucun historique) : trait plat -#}
+                            {%- set y = (26 - (first_acc / 100 * 24)) | round(2) -%}
+                            <line x1="0" y1="{{ y }}" x2="100" y2="{{ y }}" stroke="#a1a1aa" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 3"/>
+                        {% endif %}
+                    </svg>
+
+                    <!-- Tendance -->
+                    <span class="text-xs font-medium flex items-center gap-0.5 w-8 justify-end
+                        {% if trend > 0 %}text-emerald-600 dark:text-emerald-400{% elif trend < 0 %}text-red-600 dark:text-red-400{% else %}text-zinc-400{% endif %}">
+                        {% if trend > 0 %}&uarr;{% elif trend < 0 %}&darr;{% else %}&rarr;{% endif %}{{ trend | abs }}
+                    </span>
+
+                    <!-- Precision globale -->
+                    <span class="text-sm font-semibold w-12 text-right
+                        {% if t.accuracy_global >= 80 %}text-emerald-600 dark:text-emerald-400{% elif t.accuracy_global >= 50 %}text-amber-600 dark:text-amber-400{% else %}text-red-600 dark:text-red-400{% endif %}">
+                        {{ t.accuracy_global }}%
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 text-center">
+            <p class="text-sm text-zinc-400">Pas encore assez de données pour afficher ta progression par thème.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if hard_themes %}
+    <!-- Themes a retravailler -->
+    <div class="mb-8">
+        <h2 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <svg class="w-5 h-5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            Thèmes à retravailler
+        </h2>
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800">
+            {% for t in hard_themes %}
+            <div class="flex items-center justify-between p-4">
+                <div>
+                    <span class="font-medium text-sm">{{ t.intitule }}</span>
+                    {% if t.matiere %}<span class="text-sm text-zinc-400 ml-2">{{ t.matiere }}</span>{% endif %}
+                </div>
+                <span class="text-xs bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full">
+                    {{ t.total_errors }} erreur{{ 's' if t.total_errors != 1 }}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Historique des sessions -->
+    <div>
+        <h2 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <svg class="w-5 h-5 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            Historique des sessions
+        </h2>
+
+        {% if sessions %}
+        <div class="space-y-3">
+            {% for s in sessions %}
+            <details class="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+                <summary class="flex items-center justify-between p-4 cursor-pointer list-none select-none hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                    <div>
+                        <div class="text-sm text-zinc-500 dark:text-zinc-400">{{ s.started_at[:10] }} a {{ s.started_at[11:16] }}</div>
+                        <div class="flex items-center gap-2 text-xs text-zinc-400 mt-1">
+                            <span>{{ s.rounds }} question{{ 's' if s.rounds != 1 }}</span>
+                            {% if s.answers %}
+                            <span>&middot;</span>
+                            <span>{{ s.answers | selectattr('correct') | list | length }} réussie{{ 's' if (s.answers | selectattr('correct') | list | length) != 1 }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-xs font-medium px-2 py-0.5 rounded-full {% if s.accuracy >= 80 %}bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400{% elif s.accuracy >= 50 %}bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400{% else %}bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400{% endif %}">
+                            {{ s.accuracy }}%
+                        </span>
+                        <svg class="w-4 h-4 text-zinc-400 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    </div>
+                </summary>
+
+                <!-- Detail des reponses -->
+                {% if s.answers %}
+                <div class="border-t border-zinc-100 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {% for a in s.answers %}
+                    <div class="p-4">
+                        <div class="flex items-start justify-between gap-3 mb-2">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 px-2 py-0.5 rounded-full">{{ a.intitule }}</span>
+                                <span class="text-xs font-medium px-2 py-0.5 rounded-full {% if a.correct %}bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400{% else %}bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400{% endif %}">
+                                    {% if a.correct %}Réussie{% else %}À revoir{% endif %}
+                                </span>
+                            </div>
+                            {% if a.note %}<span class="text-sm font-semibold text-zinc-500 dark:text-zinc-400 flex-shrink-0">{{ a.note }}</span>{% endif %}
+                        </div>
+
+                        <p class="text-sm font-medium mb-2">{{ a.question }}</p>
+
+                        <div class="space-y-2 text-sm">
+                            <div>
+                                <span class="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Ta réponse</span>
+                                <p class="text-zinc-600 dark:text-zinc-300 mt-0.5 whitespace-pre-line">{{ a.student_answer }}</p>
+                            </div>
+                            {% if a.feedback %}
+                            <div>
+                                <span class="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Appréciation</span>
+                                <p class="text-zinc-600 dark:text-zinc-300 mt-0.5 whitespace-pre-line">{{ a.feedback }}</p>
+                            </div>
+                            {% endif %}
+                            {% if a.correction %}
+                            <div class="rounded-lg bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-100 dark:border-zinc-800 p-3">
+                                <span class="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">Correction</span>
+                                <p class="text-zinc-700 dark:text-zinc-200 mt-0.5 whitespace-pre-line">{{ a.correction }}</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="border-t border-zinc-100 dark:border-zinc-800 p-4">
+                    <p class="text-sm text-zinc-400">Aucune réponse enregistrée pour cette session.</p>
+                </div>
+                {% endif %}
+            </details>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 text-center">
+            <p class="text-sm text-zinc-400">Aucune session terminee pour l'instant.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
