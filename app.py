@@ -97,6 +97,13 @@ def ensure_db():
                 conn.commit()
             conn.close()
 
+            # Migration : creation des tables du module histoire-geo si absentes.
+            # init_database est idempotent (CREATE IF NOT EXISTS + seed si vide),
+            # il ne touche pas aux donnees existantes (verbes, sessions).
+            if 'hg_themes' not in tables:
+                logger.info("Migration : ajout des tables histoire-geo...")
+                init_database()
+
 
 # Auto-init au demarrage
 ensure_db()
