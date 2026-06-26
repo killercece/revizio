@@ -401,6 +401,39 @@ def init_database():
     print(f"  Base de donnees initialisee: {DB_PATH}")
 
 
+def seed_illustrated(conn):
+    """(Re)cree et seed la table des questions illustrees sur une connexion
+    existante, SANS commit (le commit est a la charge de l'appelant, qui peut
+    ainsi serialiser la migration via une transaction). Idempotent : on repart
+    d'une table propre pour refleter la banque HG_ILLUSTRATED courante."""
+    conn.execute("DROP TABLE IF EXISTS hg_illustrated_questions")
+    conn.execute("""
+        CREATE TABLE hg_illustrated_questions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            theme_id INTEGER REFERENCES hg_themes(id),
+            image_path TEXT,
+            description TEXT,
+            question TEXT,
+            expected_answer TEXT
+        )
+    """)
+    for intitule, image_path, description, question, expected in HG_ILLUSTRATED:
+        row = conn.execute(
+            "SELECT id FROM hg_themes WHERE intitule = ?", (intitule,)
+        ).fetchone()
+        theme_id = row[0] if row else None
+        conn.execute(
+            "INSERT INTO hg_illustrated_questions "
+            "(theme_id, image_path, description, question, expected_answer) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (theme_id, image_path, description, question, expected)
+        )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_hg_illus_theme "
+        "ON hg_illustrated_questions(theme_id)"
+    )
+
+
 if __name__ == '__main__':
     init_database()
     print("  Setup termine!")

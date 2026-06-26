@@ -104,24 +104,39 @@ def ensure_db():
                 logger.info("Migration : ajout des tables histoire-geo...")
                 init_database()
             else:
-                # Migration : re-seed des questions illustrees si elles pointent
-                # encore vers d'anciens fichiers SVG (cartes remplacees par des
-                # PNG basees sur les cartes officielles du Brevet).
-                conn2 = sqlite3.connect(DB_PATH)
+                # Migration : (re)seed des questions illustrees si la table est
+                # absente ou vide, ou si elle pointe encore vers d'anciens SVG
+                # (cartes remplacees par des PNG bases sur les cartes officielles
+                # du Brevet). Plusieurs workers gunicorn importent ce module en
+                # parallele : on serialise tout dans une transaction BEGIN
+                # IMMEDIATE pour qu'un seul worker migre, sans crash ni doublon.
+                from setup import seed_illustrated
+                conn2 = sqlite3.connect(DB_PATH, timeout=30)
                 try:
-                    old = conn2.execute(
-                        "SELECT COUNT(*) FROM hg_illustrated_questions "
-                        "WHERE image_path LIKE '%.svg'"
-                    ).fetchone()[0]
-                except sqlite3.Error:
-                    old = 0
-                if old:
-                    logger.info("Migration : mise a jour des cartes illustrees...")
-                    conn2.execute("DROP TABLE hg_illustrated_questions")
+                    conn2.execute("BEGIN IMMEDIATE")
+                    has_table = conn2.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' "
+                        "AND name='hg_illustrated_questions'"
+                    ).fetchone()
+                    need = True
+                    if has_table:
+                        oldsvg = conn2.execute(
+                            "SELECT COUNT(*) FROM hg_illustrated_questions "
+                            "WHERE image_path LIKE '%.svg'"
+                        ).fetchone()[0]
+                        total = conn2.execute(
+                            "SELECT COUNT(*) FROM hg_illustrated_questions"
+                        ).fetchone()[0]
+                        need = (oldsvg > 0) or (total == 0)
+                    if need:
+                        logger.info("Migration : (re)seed des cartes illustrees...")
+                        seed_illustrated(conn2)
                     conn2.commit()
-                conn2.close()
-                if old:
-                    init_database()
+                except sqlite3.Error as e:
+                    logger.warning(f"Migration cartes illustrees ignoree: {e}")
+                    conn2.rollback()
+                finally:
+                    conn2.close()
 
 
 # Auto-init au demarrage
