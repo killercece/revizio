@@ -103,6 +103,25 @@ def ensure_db():
             if 'hg_themes' not in tables:
                 logger.info("Migration : ajout des tables histoire-geo...")
                 init_database()
+            else:
+                # Migration : re-seed des questions illustrees si elles pointent
+                # encore vers d'anciens fichiers SVG (cartes remplacees par des
+                # PNG basees sur les cartes officielles du Brevet).
+                conn2 = sqlite3.connect(DB_PATH)
+                try:
+                    old = conn2.execute(
+                        "SELECT COUNT(*) FROM hg_illustrated_questions "
+                        "WHERE image_path LIKE '%.svg'"
+                    ).fetchone()[0]
+                except sqlite3.Error:
+                    old = 0
+                if old:
+                    logger.info("Migration : mise a jour des cartes illustrees...")
+                    conn2.execute("DROP TABLE hg_illustrated_questions")
+                    conn2.commit()
+                conn2.close()
+                if old:
+                    init_database()
 
 
 # Auto-init au demarrage

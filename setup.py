@@ -185,33 +185,33 @@ HG_THEMES = [
 # histographie.net (O. Fourrier).
 HG_ILLUSTRATED = [
     ("Les aires urbaines d'une France mondialisée",
-     "img/geo/france-metropoles.svg",
+     "img/geo/france-metropoles.png",
      "Carte de France avec 6 points : 1=Paris, 2=Lille, 3=Strasbourg, "
      "4=Lyon, 5=Marseille, 6=Bordeaux.",
      "Nomme les grandes aires urbaines repérées 1 à 6.",
      "1 Paris, 2 Lille, 3 Strasbourg, 4 Lyon, 5 Marseille, 6 Bordeaux"),
     ("Les aires urbaines d'une France mondialisée",
-     "img/geo/france-fleuves.svg",
-     "Carte de France schématique avec 5 fleuves numérotés : 1=Seine, 2=Loire, "
+     "img/geo/france-fleuves.png",
+     "Carte de France avec 5 fleuves tracés et numérotés : 1=Seine, 2=Loire, "
      "3=Garonne, 4=Rhône, 5=Rhin.",
      "Nomme les 5 grands fleuves français numérotés.",
      "1 Seine, 2 Loire, 3 Garonne, 4 Rhône, 5 Rhin"),
     ("Les espaces de faible densité et leurs atouts",
-     "img/geo/france-reliefs.svg",
+     "img/geo/france-reliefs.png",
      "Carte de France des reliefs : 1=Massif central, 2=Alpes, 3=Pyrénées, "
      "4=Jura, 5=Vosges.",
      "Identifie les 5 principaux massifs montagneux numérotés.",
      "1 Massif central, 2 Alpes, 3 Pyrénées, 4 Jura, 5 Vosges"),
     ("Les territoires ultramarins français",
-     "img/geo/france-drom.svg",
-     "5 vignettes numérotées : 1=Guadeloupe, 2=Martinique, 3=Guyane, "
-     "4=La Réunion, 5=Mayotte. Guyane = continentale (Amérique du Sud), "
-     "les autres sont insulaires.",
+     "img/geo/france-drom.png",
+     "Planisphère localisant les 5 DROM numérotés : 1=Guadeloupe, "
+     "2=Martinique, 3=Guyane, 4=La Réunion, 5=Mayotte. Guyane = continentale "
+     "(Amérique du Sud), les autres sont insulaires.",
      "Nomme les 5 DROM et précise lesquels sont insulaires.",
      "1 Guadeloupe (île), 2 Martinique (île), 3 Guyane (continentale, Amérique "
      "du Sud), 4 La Réunion (île), 5 Mayotte (île)"),
     ("La France et l'Europe dans le monde",
-     "img/geo/france-frontieres.svg",
+     "img/geo/france-frontieres.png",
      "Carte des pays frontaliers numérotés 1 à 7 : 1=Belgique, 2=Luxembourg, "
      "3=Allemagne, 4=Suisse, 5=Italie, 6=Espagne, 7=Royaume-Uni relié par le "
      "tunnel sous la Manche.",
@@ -220,14 +220,13 @@ HG_ILLUSTRATED = [
      "1 Belgique, 2 Luxembourg, 3 Allemagne, 4 Suisse, 5 Italie, 6 Espagne, "
      "7 Royaume-Uni (tunnel sous la Manche)"),
     ("L'UE, un territoire de référence et d'appartenance",
-     "img/geo/ue-zone-euro.svg",
-     "Carte de l'UE avec la zone euro mise en évidence (pays ayant adopté "
-     "l'euro).",
-     "Qu'indique la zone colorée (zone euro) ? Cite trois pays membres.",
-     "La zone euro = pays utilisant l'euro ; ex : France, Allemagne, Espagne, "
-     "Italie, Portugal…"),
+     "img/geo/ue-pays.png",
+     "Carte de l'Europe avec 6 pays de l'UE numérotés : 1=France, 2=Espagne, "
+     "3=Allemagne, 4=Italie, 5=Pologne, 6=Suède.",
+     "Nomme les 6 pays de l'Union européenne numérotés sur la carte.",
+     "1 France, 2 Espagne, 3 Allemagne, 4 Italie, 5 Pologne, 6 Suède"),
     ("Les aires urbaines d'une France mondialisée",
-     "img/geo/france-regions.svg",
+     "img/geo/france-regions.png",
      "Carte des 13 régions administratives métropolitaines numérotées 1 à 13 "
      "(1=Hauts-de-France, 2=Normandie, 3=Île-de-France, 4=Grand Est, "
      "5=Bretagne, 6=Pays de la Loire, 7=Centre-Val de Loire, "
@@ -241,14 +240,11 @@ HG_ILLUSTRATED = [
      "10 Auvergne-Rhône-Alpes, 11 Occitanie, "
      "12 Provence-Alpes-Côte d'Azur, 13 Corse"),
     ("La France et l'Europe dans le monde",
-     "img/geo/monde-reperes.svg",
-     "Planisphère avec les 5 BRICS numérotés (1=Brésil, 2=Russie, 3=Inde, "
-     "4=Chine, 5=Afrique du Sud) et les 2 grands canaux maritimes (Panama "
-     "reliant Atlantique et Pacifique ; Suez reliant Méditerranée et mer "
-     "Rouge).",
-     "Identifie les 5 BRICS numérotés et nomme les 2 grands canaux maritimes.",
-     "BRICS : 1 Brésil, 2 Russie, 3 Inde, 4 Chine, 5 Afrique du Sud ; canaux : "
-     "Panama (Atlantique/Pacifique) et Suez (Méditerranée/mer Rouge)"),
+     "img/geo/monde-reperes.png",
+     "Planisphère avec les 5 BRICS numérotés : 1=Brésil, 2=Russie, 3=Inde, "
+     "4=Chine, 5=Afrique du Sud.",
+     "Identifie les 5 pays des BRICS numérotés sur le planisphère.",
+     "1 Brésil, 2 Russie, 3 Inde, 4 Chine, 5 Afrique du Sud"),
 ]
 
 
