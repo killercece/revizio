@@ -145,13 +145,57 @@ def get_tool_stats(db, tool_id):
 
 # === PROXY CLAUDE (module histoire-geo) ===
 
-def ask_proxy(system, user_content, max_tokens=600):
-    """Interroge le proxy Claude et renvoie le dict JSON parse de la reponse.
+def _salvage_list(text):
+    """Recupere les objets JSON complets d'un tableau, meme si la reponse est
+    tronquee (le dernier objet incomplet est simplement ignore)."""
+    start = text.find('[')
+    if start == -1:
+        return []
+    objs = []
+    depth = 0
+    obj_start = None
+    in_str = False
+    esc = False
+    for i in range(start + 1, len(text)):
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == '\\':
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == '{':
+            if depth == 0:
+                obj_start = i
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0 and obj_start is not None:
+                try:
+                    objs.append(json.loads(text[obj_start:i + 1]))
+                except json.JSONDecodeError:
+                    pass
+                obj_start = None
+        elif ch == ']' and depth == 0:
+            break
+    return objs
+
+
+def ask_proxy(system, user_content, max_tokens=600, list_key=None):
+    """Interroge le proxy Claude et renvoie le JSON parse de la reponse.
 
     Effectue un POST sur PROXY_URL (header Authorization: Bearer PROXY_TOKEN).
     Le texte renvoye peut etre encadre de fences ```json ... ``` : on les
     retire avant json.loads. Leve une exception claire en cas d'erreur
     (timeout 120s, reponse invalide, JSON non parsable).
+
+    Si list_key est fourni, renvoie la liste sous cette cle (ex. 'questions',
+    'corrections') et tolere une reponse tronquee en recuperant les objets
+    complets. Sinon renvoie le dict complet.
     """
     headers = {
         'Authorization': f'Bearer {PROXY_TOKEN}',
@@ -182,8 +226,24 @@ def ask_proxy(system, user_content, max_tokens=600):
         text = fence.group(1).strip()
 
     try:
-        return json.loads(text)
+        data = json.loads(text)
+        if list_key is not None:
+            if isinstance(data, dict):
+                return data.get(list_key, [])
+            if isinstance(data, list):
+                return data
+            return []
+        return data
     except json.JSONDecodeError as e:
+        # Reponse probablement tronquee : on tente de recuperer les objets
+        # complets si on attend une liste, sinon on echoue.
+        if list_key is not None:
+            salvaged = _salvage_list(text)
+            if salvaged:
+                logger.warning(
+                    "JSON tronque du proxy : %d objets recuperes", len(salvaged)
+                )
+                return salvaged
         raise RuntimeError(f"JSON invalide renvoye par le proxy Claude: {e}")
 
 
@@ -631,11 +691,17 @@ def create_hg_session():
         text_questions = []  # [{theme_id, question}]
         if n_text > 0:
             system = (
-                "Tu es professeur d'histoire-géographie en 3e. Génère des questions "
-                "ouvertes de niveau Brevet. Réponds UNIQUEMENT en JSON "
-                "{\"questions\":[{\"theme_id\":int,\"question\":\"...\"}]}. "
-                "Une question par thème demandé, variées, strictement dans le "
-                "programme officiel."
+                "Tu es professeur d'histoire-géographie en 3e. Génère des "
+                "questions COURTES de connaissances pures, niveau Brevet, qui "
+                "appellent une réponse BRÈVE et factuelle : une date, un lieu, "
+                "un personnage, un nombre, un mot de vocabulaire ou une "
+                "définition en quelques mots. INTERDIT : les questions "
+                "ouvertes du type « expliquez », « montrez », « décrivez », "
+                "qui demandent un paragraphe. Pour chaque question, fournis "
+                "aussi la réponse attendue (courte). Réponds UNIQUEMENT en "
+                "JSON {\"questions\":[{\"theme_id\":int,\"question\":\"...\","
+                "\"expected_answer\":\"...\"}]}. Une question par thème "
+                "demandé, variées, strictement dans le programme officiel."
             )
             lines = ["Génère les questions demandées pour les thèmes suivants :"]
             for tid, nb in per_theme.items():
@@ -648,12 +714,13 @@ def create_hg_session():
             user_content = '\n'.join(lines)
 
             try:
-                result = ask_proxy(system, user_content, max_tokens=1500)
+                generated = ask_proxy(
+                    system, user_content, max_tokens=2000, list_key='questions'
+                )
             except RuntimeError as e:
                 logger.error(f"Erreur proxy (generation batch): {e}")
                 return jsonify({"error": "Service IA indisponible"}), 502
 
-            generated = result.get('questions') or []
             for q in generated:
                 tid = q.get('theme_id')
                 # Garder uniquement les themes valides
@@ -661,6 +728,7 @@ def create_hg_session():
                     text_questions.append({
                         'theme_id': tid,
                         'question': q.get('question', ''),
+                        'expected_answer': q.get('expected_answer') or None,
                     })
             # Tronquer si le proxy en a renvoye trop
             text_questions = text_questions[:n_text]
@@ -675,7 +743,7 @@ def create_hg_session():
                 'question': q['question'],
                 'illustrated': False,
                 'image_path': None,
-                'expected_answer': None,
+                'expected_answer': q.get('expected_answer'),
             })
         for r in illus_selected:
             t = theme_by_id.get(r['theme_id'])
@@ -771,8 +839,13 @@ def correct_hg_session(session_id):
 
     # Construire le user_content (une entree par question)
     system = (
-        "Tu es professeur d'histoire-géo en 3e, bienveillant et précis. Corrige "
-        "chaque réponse. Réponds UNIQUEMENT en JSON "
+        "Tu es professeur d'histoire-géo en 3e qui corrige des questions de "
+        "connaissances à réponse COURTE. Sois bienveillant mais précis : la "
+        "réponse de l'élève est correcte dès qu'elle contient l'information "
+        "essentielle attendue (l'orthographe approximative est tolérée). "
+        "Marque correct=true seulement si le fond est juste. Sois CONCIS : "
+        "feedback = une phrase, correction = la bonne réponse courte (pas de "
+        "paragraphe, pas de développement). Réponds UNIQUEMENT en JSON "
         "{\"corrections\":[{\"idx\":int,\"correct\":bool,\"note\":\"x/5\","
         "\"feedback\":\"...\",\"correction\":\"...\"}]}."
     )
@@ -787,15 +860,22 @@ def correct_hg_session(session_id):
         lines.append(entry)
     user_content = '\n'.join(lines)
 
+    # Repli gracieux : si le proxy echoue, on ne plante PAS. On renvoie quand
+    # meme un resultat (en s'appuyant sur les reponses attendues) pour que
+    # l'eleve voie ses corrections.
+    proxy_failed = False
+    corr_list = []
     try:
-        result = ask_proxy(system, user_content, max_tokens=2500)
+        corr_list = ask_proxy(
+            system, user_content, max_tokens=4096, list_key='corrections'
+        )
     except RuntimeError as e:
         logger.error(f"Erreur proxy (correction batch): {e}")
-        return jsonify({"error": "Service IA indisponible"}), 502
+        proxy_failed = True
 
     # Apparier les corrections par idx (valeurs par defaut si manquant)
     corr_by_idx = {}
-    for c in (result.get('corrections') or []):
+    for c in corr_list:
         if isinstance(c, dict) and c.get('idx') is not None:
             corr_by_idx[str(c.get('idx'))] = c
 
@@ -808,9 +888,13 @@ def correct_hg_session(session_id):
         for k in ordered_idx:
             q = mapping[k]
             c = corr_by_idx.get(k, {})
+            has_corr = bool(c)
             correct = bool(c.get('correct'))
-            note = c.get('note', '')
+            note = c.get('note', '') or ('—' if not has_corr else '')
             feedback = c.get('feedback', '')
+            if not feedback and not has_corr:
+                feedback = ("Correction automatique indisponible pour cette "
+                            "question. Voici la réponse attendue.")
             correction = c.get('correction', '') or (q.get('expected_answer') or '')
             student = answer_by_idx.get(k, '')
 
