@@ -55,8 +55,16 @@ function initEventListeners() {
         if (retryAction) retryAction();
     });
 
-    // Bouton "Continuer" sur l'ecran de resultats : nouvelle serie.
+    // "Continuer" : relance directement 10 nouvelles questions sur les MEMES
+    // themes (on ne redemande pas la selection).
     document.getElementById('btn-continue').addEventListener('click', () => {
+        document.getElementById('results-list').innerHTML = '';
+        window.scrollTo(0, 0);
+        startSession();
+    });
+
+    // "Nouvelle session" : retour a la selection des themes.
+    document.getElementById('btn-new-session').addEventListener('click', () => {
         sessionId = null;
         questions = [];
         answers = {};
