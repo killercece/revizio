@@ -636,29 +636,6 @@ def hg_suivi():
 
 # === API HISTOIRE-GEO ===
 
-@app.route('/api/hg/admin/purge-tests', methods=['POST'])
-def purge_hg_tests():
-    """[TEMPORAIRE] Purge les sessions de test du module histoire-geo.
-
-    Protege par le header X-Admin-Token (== PROXY_TOKEN). Supprime toutes les
-    sessions histoire-geo et leurs reponses, sans toucher aux verbes.
-    """
-    token = request.headers.get('X-Admin-Token', '')
-    if not PROXY_TOKEN or token != PROXY_TOKEN:
-        return jsonify({"error": "Non autorise"}), 403
-    try:
-        db = get_db()
-        ans = db.execute("DELETE FROM hg_answers").rowcount
-        ses = db.execute(
-            "DELETE FROM sessions WHERE tool_type = 'histoire-geo'"
-        ).rowcount
-        db.commit()
-        return jsonify({"deleted_sessions": ses, "deleted_answers": ans}), 200
-    except sqlite3.Error as e:
-        logger.error(f"Erreur purge: {e}")
-        return jsonify({"error": "Erreur base de donnees"}), 500
-
-
 @app.route('/api/hg/themes')
 def get_hg_themes():
     """Recupere la liste des themes d'histoire-geo (triee par matiere, chapitre)."""
