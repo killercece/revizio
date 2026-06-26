@@ -703,18 +703,25 @@ def create_hg_session():
         ).fetchall()
         illus_rows = [dict(r) for r in illus_rows]
         random.shuffle(illus_rows)
-        max_illus = min(3, count, len(illus_rows))
-        illus_selected = illus_rows[:max_illus]
+        # Nombre de questions illustrees variable (1 a 3) pour plus de variete,
+        # sans depasser la moitie de la serie.
+        max_illus = min(3, count // 2, len(illus_rows))
+        n_illus = random.randint(1, max_illus) if max_illus > 0 else 0
+        illus_selected = illus_rows[:n_illus]
 
         # Le reste = questions texte a generer
         n_text = count - len(illus_selected)
 
-        # Repartir les n_text questions sur les themes choisis (round-robin)
+        # Repartir les n_text questions sur les themes choisis en variant l'ordre
+        # (sinon, themes tries par matiere => seules les premieres sont servies).
         text_assignments = []  # liste de theme_id
         if n_text > 0:
+            pool = list(chosen_ids)
             i = 0
             while len(text_assignments) < n_text:
-                text_assignments.append(chosen_ids[i % len(chosen_ids)])
+                if i % len(pool) == 0:
+                    random.shuffle(pool)
+                text_assignments.append(pool[i % len(pool)])
                 i += 1
 
         # Compter le nombre de questions texte demandees par theme

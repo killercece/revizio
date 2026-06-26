@@ -54,6 +54,17 @@ function initEventListeners() {
     document.getElementById('btn-retry-action').addEventListener('click', () => {
         if (retryAction) retryAction();
     });
+
+    // Bouton "Continuer" sur l'ecran de resultats : nouvelle serie.
+    document.getElementById('btn-continue').addEventListener('click', () => {
+        sessionId = null;
+        questions = [];
+        answers = {};
+        currentPos = 0;
+        document.getElementById('results-list').innerHTML = '';
+        showScreen('screen-start');
+        window.scrollTo(0, 0);
+    });
 }
 
 // === NAVIGATION ENTRE ECRANS ===
