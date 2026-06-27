@@ -219,7 +219,7 @@ def _salvage_list(text):
     return objs
 
 
-def ask_proxy(system, user_content, max_tokens=600, list_key=None):
+def ask_proxy(system, user_content, max_tokens=600, list_key=None, temperature=None):
     """Interroge le proxy Claude et renvoie le JSON parse de la reponse.
 
     Effectue un POST sur PROXY_URL (header Authorization: Bearer PROXY_TOKEN).
@@ -241,6 +241,8 @@ def ask_proxy(system, user_content, max_tokens=600, list_key=None):
         'system': system,
         'messages': [{'role': 'user', 'content': user_content}],
     }
+    if temperature is not None:
+        body['temperature'] = temperature
 
     try:
         resp = requests.post(PROXY_URL, headers=headers, json=body, timeout=120)
@@ -703,10 +705,10 @@ def create_hg_session():
         ).fetchall()
         illus_rows = [dict(r) for r in illus_rows]
         random.shuffle(illus_rows)
-        # Nombre de questions illustrees variable (1 a 3) pour plus de variete,
-        # sans depasser la moitie de la serie.
-        max_illus = min(3, count // 2, len(illus_rows))
-        n_illus = random.randint(1, max_illus) if max_illus > 0 else 0
+        # Banque illustree fixe (8 cartes) => pour eviter la repetition, on en
+        # met peu et de facon variable (0 a 2 par serie).
+        max_illus = min(2, count // 3, len(illus_rows))
+        n_illus = random.randint(0, max_illus) if max_illus > 0 else 0
         illus_selected = illus_rows[:n_illus]
 
         # Le reste = questions texte a generer
@@ -731,32 +733,64 @@ def create_hg_session():
 
         text_questions = []  # [{theme_id, question}]
         if n_text > 0:
+            # Anti-repetition : questions deja posees recemment (a eviter).
+            try:
+                recent = db.execute(
+                    "SELECT question FROM hg_answers ORDER BY id DESC LIMIT 60"
+                ).fetchall()
+                recent_qs = [r[0] for r in recent if r and r[0]]
+            except sqlite3.Error:
+                recent_qs = []
+
             system = (
                 "Tu es professeur d'histoire-géographie en 3e. Génère des "
                 "questions COURTES de connaissances pures, niveau Brevet, qui "
                 "appellent une réponse BRÈVE et factuelle : une date, un lieu, "
                 "un personnage, un nombre, un mot de vocabulaire ou une "
                 "définition en quelques mots. INTERDIT : les questions "
-                "ouvertes du type « expliquez », « montrez », « décrivez », "
-                "qui demandent un paragraphe. Pour chaque question, fournis "
-                "aussi la réponse attendue (courte). Réponds UNIQUEMENT en "
+                "ouvertes du type « expliquez », « montrez », « décrivez ». "
+                "VARIÉTÉ IMPÉRATIVE : varie fortement les faits, les angles et "
+                "les formulations d'une question à l'autre ; évite les "
+                "questions trop évidentes ou déjà vues ; explore aussi des "
+                "détails précis et moins connus du programme. Respecte la "
+                "notion imposée pour chaque question. Pour chaque question, "
+                "fournis la réponse attendue (courte). Réponds UNIQUEMENT en "
                 "JSON {\"questions\":[{\"theme_id\":int,\"question\":\"...\","
-                "\"expected_answer\":\"...\"}]}. Une question par thème "
-                "demandé, variées, strictement dans le programme officiel."
+                "\"expected_answer\":\"...\"}]}."
             )
-            lines = ["Génère les questions demandées pour les thèmes suivants :"]
+
+            # Une consigne par question, ancree sur une notion ALEATOIRE du
+            # theme (au lieu d'envoyer tout le bloc de notions) : cela force la
+            # diversite des faits interroges.
+            lines = ["Génère UNE question pour chacune de ces consignes "
+                     "(une consigne = une question, dans l'ordre) :"]
+            qnum = 1
             for tid, nb in per_theme.items():
                 t = theme_by_id[tid]
-                lines.append(
-                    f"- theme_id={tid} ({nb} question(s)) : {t['intitule']} "
-                    f"(chapitre : {t['chapitre']}, {t['matiere']}). "
-                    f"Notions clés : {t['points_cles']}"
-                )
+                notions = [s.strip() for s in re.split(r'[;,]', t['points_cles'] or '')
+                           if s.strip()]
+                random.shuffle(notions)
+                for k in range(nb):
+                    focus = notions[k % len(notions)] if notions else t['intitule']
+                    lines.append(
+                        f"{qnum}. theme_id={tid} — {t['matiere']} / "
+                        f"{t['intitule']}. Pose une question précise et "
+                        f"originale portant sur : « {focus} »."
+                    )
+                    qnum += 1
+
+            if recent_qs:
+                lines.append("")
+                lines.append("NE REPOSE AUCUNE de ces questions déjà posées "
+                             "récemment (change de fait ou de formulation) :")
+                lines.extend(f"- {q}" for q in recent_qs)
+
             user_content = '\n'.join(lines)
 
             try:
                 generated = ask_proxy(
-                    system, user_content, max_tokens=2000, list_key='questions'
+                    system, user_content, max_tokens=2500,
+                    list_key='questions', temperature=1.0
                 )
             except RuntimeError as e:
                 logger.error(f"Erreur proxy (generation batch): {e}")
