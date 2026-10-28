@@ -249,6 +249,36 @@
             qs.append(card);
         });
 
+        const improve = $('fb-improve-list');
+        improve.replaceChildren();
+        fb.ameliorations.forEach((a) => {
+            const card = el('div', 'rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4');
+            const was = el('p', 'text-xs text-zinc-500 dark:text-zinc-400 mb-2');
+            was.append(document.createTextNode('Tu as écrit : '),
+                       el('em', '', `« ${a.extrait} »`),
+                       document.createTextNode(a.type === 'tournure' ? '  ·  autre tournure' : '  ·  mot plus précis'));
+            card.append(was);
+            const props = el('div', 'flex flex-wrap gap-2 mb-2');
+            a.propositions.forEach((p) => props.append(
+                el('span', 'text-sm px-3 py-1 rounded-full bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300', p)));
+            card.append(props);
+            if (a.pourquoi) card.append(el('p', 'text-xs text-zinc-500 dark:text-zinc-400', a.pourquoi));
+            improve.append(card);
+        });
+        $('fb-improve').classList.toggle('hidden', fb.ameliorations.length === 0);
+
+        const spell = $('fb-spell-list');
+        spell.replaceChildren();
+        fb.orthographe.forEach((f) => {
+            const li = el('li');
+            li.append(el('span', 'line-through text-rose-600 dark:text-rose-400', f.faute),
+                      document.createTextNode(' → '),
+                      el('strong', '', f.correction));
+            if (f.regle) li.append(el('span', 'block text-xs text-zinc-500 dark:text-zinc-400', f.regle));
+            spell.append(li);
+        });
+        $('fb-spell').classList.toggle('hidden', fb.orthographe.length === 0);
+
         const words = $('fb-words');
         const list = $('fb-words-list');
         list.replaceChildren();

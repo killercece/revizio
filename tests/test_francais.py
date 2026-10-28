@@ -108,6 +108,13 @@ def corr(score, comp=None):
         'competences': comp or {}, 'point_fort': 'précis', 'priorite': 'cite',
         'erreurs': ['reponse_vague'], 'modele': [{'id': 1, 'texte': 'Il pleut.'}],
         'mots': [{'mot': 'indolent', 'sens': 'mou'}], 'profil': 'Profil mis à jour.',
+        'ameliorations': [
+            {'extrait': 'ça montre', 'type': 'vocabulaire', 'propositions': ['cela suggère', 'cela souligne'],
+             'pourquoi': 'verbe plus précis'},
+            {'extrait': 'x', 'type': 'tournure', 'propositions': []},  # ignoree : aucune proposition
+        ],
+        'orthographe': [{'faute': 'ils sont arrivé', 'correction': 'ils sont arrivés', 'regle': 'accord'},
+                        {'faute': 'incomplète'}],  # ignoree : pas de correction
     }
 
 
@@ -143,9 +150,15 @@ def test_routes():
                json={'answers': {'1': 'Il pleut', '2': 'Triste.'}}).get_json()
     assert r['score'] == 90 and r['modele'] and not r['can_retry']
     # placement reussi : effet passe du niveau 2 au niveau 4
-    assert r['level_changes'] == [{'skill': "Expliquer l'effet d'un procédé", 'from': 2, 'to': 4}]
+    assert {'skill': "Expliquer l'effet d'un procédé", 'from': 2, 'to': 4} in r['level_changes']
+    assert [a['propositions'] for a in r['ameliorations']] == [['cela suggère', 'cela souligne']]
+    assert [f['correction'] for f in r['orthographe']] == ['ils sont arrivés']
+    # l'orthographe est notee a chaque correction, meme hors competences de l'exercice
     ov = c.get('/api/fr/overview').get_json()
+    ortho = [s for a in ov['axes'] for s in a['skills'] if s['id'] == 'orthographe'][0]
+    assert ortho['attempts'] == 1
     assert 'Profil mis à jour' in ov['profile']
+    assert 'orthographe' in calls[-1].split('COMPÉTENCES À NOTER')[1].split('\n')[0]
 
     # echec du proxy a la correction : message propre, rien n'est enregistre
     ex2 = post(c, '/api/fr/next', json={'skill': 'plan', 'fresh': True}).get_json()

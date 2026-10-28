@@ -35,8 +35,8 @@ MAX_LEVEL = 6
 # par l'IA tournent donc en tache de fond, le navigateur interroge /api/fr/jobs/<id>.
 JOB_STALE_SECONDS = 180
 BILAN_EVERY = 5
-BILAN_SKILLS = ['effet', 'citer', 'precision', 'phrase', 'connect', 'paragraphe',
-                'verbes', 'lexique']
+BILAN_SKILLS = ['effet', 'citer', 'precision', 'phrase', 'orthographe', 'connect',
+                'paragraphe', 'verbes', 'lexique']
 
 # Ce que les scans des cours de Lucas ont montre (sequence 1 : la nouvelle).
 CLASS_CONTEXT = (
@@ -316,6 +316,8 @@ GEN_SYSTEM = (
     "restent imprécises et il peine à interpréter, rédiger et organiser ses idées. "
     "L'exercice doit durer 5 à 10 minutes, être concret, sans cours théorique : de la "
     "mise en pratique. Les questions exigent de la précision (cite, nomme, explique). "
+    "Le but est la clarté, la précision et l'aisance d'un élève plutôt scientifique, "
+    "pas le style littéraire. "
     "Chaque question est autonome et claire pour un élève seul. Tutoie l'élève "
     "(« tu », « cite », « explique ») dans la consigne et les questions. "
     "Réponds UNIQUEMENT en JSON : {\"titre\":\"court\",\"consigne\":\"1 à 2 phrases "
@@ -478,7 +480,13 @@ def _client_exercise(row, attempts=0):
 
 CORR_SYSTEM = (
     "Tu es professeur de français en seconde, correcteur bienveillant mais exigeant "
-    "sur la PRÉCISION (c'est le point faible de l'élève). Principes : "
+    "sur la PRÉCISION (point faible de l'élève), la QUALITÉ DE LA RÉDACTION, le "
+    "VOCABULAIRE et l'ORTHOGRAPHE. L'élève est un scientifique dans l'âme : le but "
+    "n'est pas d'en faire un écrivain mais de le rendre clair, précis et à l'aise à un "
+    "niveau seconde. Ne propose jamais de style fleuri ou littéraire : des mots justes "
+    "et des phrases nettes qu'un élève de 15 ans peut réellement employer. "
+    "Reste toujours encourageant : commence par ce qui va, formule chaque défaut comme "
+    "une amélioration possible, jamais comme un reproche. Principes : "
     "1) note chaque question de 0 à 1 selon la justesse, la précision, la citation et "
     "l'expression ; une réponse vague ou incomplète ne dépasse pas 0,6 ; une réponse "
     "vide vaut 0 ; "
@@ -500,13 +508,59 @@ CORR_SYSTEM = (
     "constats confirmés sur plusieurs exercices des simples observations du jour, et "
     "ne qualifie jamais l'élève de façon négative ou définitive ; "
     "10) tutoie l'élève dans les commentaires et les pistes, avec un ton encourageant et "
-    "exigeant, jamais sec ni ironique. "
+    "exigeant, jamais sec ni ironique ; "
+    "11) ameliorations : 2 à 4 passages que l'élève a écrits et qui peuvent être "
+    "améliorés (mot pauvre ou répété, verbe vague comme « montre » ou « dit », "
+    "tournure lourde ou orale, phrase confuse). Pour chacun : extrait = ses mots exacts, "
+    "type = vocabulaire ou tournure, propositions = 2 ou 3 remplacements (synonymes "
+    "précis ou tournures différentes) de niveau seconde, courts et réutilisables, "
+    "pourquoi = une courte explication. Si la réponse est correcte, propose quand même "
+    "une variante plus précise ; "
+    "12) orthographe : relève jusqu'à 5 fautes réelles (orthographe, accord, conjugaison, "
+    "homophone) avec faute = le mot ou groupe fautif, correction, regle = rappel en une "
+    "phrase très courte. Liste vide s'il n'y en a pas, et dis-le dans point_fort. "
+    "Ajoute le tag faute_orthographe dans erreurs s'il y en a plusieurs. "
+    "Pour orthographe, ne note pas la compétence « orthographe » comme les autres : "
+    "0,9 et plus s'il y a au plus 1 faute, 0,6 pour 2 à 3 fautes, 0,3 au-delà. "
     "Réponds UNIQUEMENT en JSON : {\"questions\":[{\"id\":1,\"score\":0.0,"
     "\"commentaire\":\"...\",\"indice_retry\":\"...\"}],\"competences\":{\"id\":0.0},"
     "\"point_fort\":\"...\",\"priorite\":\"...\",\"erreurs\":[\"tag\"],"
+    "\"ameliorations\":[{\"extrait\":\"...\",\"type\":\"vocabulaire|tournure\","
+    "\"propositions\":[\"...\",\"...\"],\"pourquoi\":\"...\"}],"
+    "\"orthographe\":[{\"faute\":\"...\",\"correction\":\"...\",\"regle\":\"...\"}],"
     "\"modele\":[{\"id\":1,\"texte\":\"...\"}],\"mots\":[{\"mot\":\"...\",\"sens\":\"...\"}],"
     "\"profil\":\"...\"}"
 )
+
+
+def _scored_skills(skills):
+    """Competences notees a chaque correction : celles de l'exercice, plus
+    l'orthographe, evaluee sur tout ce que l'eleve ecrit."""
+    return skills if 'orthographe' in skills else skills + ['orthographe']
+
+
+def _clean_improvements(raw):
+    """Garde des ameliorations bien formees (extrait + au moins une proposition)."""
+    out = []
+    for a in (raw or []):
+        if not isinstance(a, dict) or not a.get('extrait'):
+            continue
+        props = [str(p) for p in (a.get('propositions') or []) if str(p).strip()][:3]
+        if props:
+            out.append({'extrait': str(a['extrait'])[:200],
+                        'type': 'tournure' if a.get('type') == 'tournure' else 'vocabulaire',
+                        'propositions': props,
+                        'pourquoi': str(a.get('pourquoi', ''))[:240]})
+    return out[:4]
+
+
+def _clean_spelling(raw):
+    out = []
+    for f in (raw or []):
+        if isinstance(f, dict) and f.get('faute') and f.get('correction'):
+            out.append({'faute': str(f['faute'])[:80], 'correction': str(f['correction'])[:80],
+                        'regle': str(f.get('regle', ''))[:200]})
+    return out[:5]
 
 
 def _clamp01(v, default=0.0):
@@ -687,7 +741,7 @@ def _run_correction(db, ex_id, answers):
         f"TEXTE : {payload['passage']['source']}\n{payload['passage']['texte']}",
         f"PROFIL DE L'ÉLÈVE : {_profile(db)}",
         "COMPÉTENCES À NOTER (clé = id) : " + "; ".join(
-            f"{s} = {SKILL_BY_ID[s]['label']}" for s in skills),
+            f"{s} = {SKILL_BY_ID[s]['label']}" for s in _scored_skills(skills)),
         f"ESSAI N°{attempt_no}",
     ]
     if prev:
@@ -726,7 +780,7 @@ def _run_correction(db, ex_id, answers):
     comp = fb.get('competences') if isinstance(fb.get('competences'), dict) else {}
     states = _load_states(db)
     level_changes = []
-    for s in skills:
+    for s in _scored_skills(skills):
         sc = _clamp01(comp.get(s), default=overall)
         new_state, old_level = apply_result(states[s], sc, attempt_no)
         _save_state(db, new_state)
@@ -752,6 +806,8 @@ def _run_correction(db, ex_id, answers):
         'priorite': str(fb.get('priorite', '')),
         'erreurs': [str(t) for t in (fb.get('erreurs') or [])][:6],
         'modele': modele, 'mots': mots,
+        'ameliorations': _clean_improvements(fb.get('ameliorations')),
+        'orthographe': _clean_spelling(fb.get('orthographe')),
     }
     db.execute("""
         INSERT INTO fr_attempts (exercise_id, attempt_no, answers, score, feedback, created_at)
@@ -770,6 +826,8 @@ def _run_correction(db, ex_id, answers):
         'point_fort': stored['point_fort'],
         'priorite': stored['priorite'],
         'mots': mots,
+        'ameliorations': stored['ameliorations'],
+        'orthographe': stored['orthographe'],
         'level_changes': level_changes,
         'can_retry': attempt_no == 1 and overall < 0.85,
         'modele': modele if unlocked else None,

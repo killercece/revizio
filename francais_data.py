@@ -33,6 +33,9 @@ SKILLS = [
     {'id': 'phrase', 'axis': 'redaction', 'label': 'Qualité des phrases',
      'desc': "syntaxe, ponctuation, registre soutenu, éviter les répétitions et l'oral, "
              "phrases ni trop courtes ni interminables"},
+    {'id': 'orthographe', 'axis': 'redaction', 'label': 'Orthographe et accords',
+     'desc': "orthographe lexicale et grammaticale : accords (sujet-verbe, participes), "
+             "homophones (a/à, et/est, ce/se…), conjugaison, ponctuation"},
     {'id': 'connect', 'axis': 'redaction', 'label': 'Connecteurs logiques',
      'desc': "articuler les idées : d'abord, ensuite, en effet, ainsi, donc, cependant, de plus…"},
     {'id': 'lexique', 'axis': 'vocab', 'label': 'Richesse du lexique',
