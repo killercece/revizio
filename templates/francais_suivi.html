@@ -1,0 +1,72 @@
+{% set active_page = 'francais_suivi' %}
+{% extends "base.html" %}
+{% block title %}Suivi Français{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold tracking-tight mb-1">Suivi : Français</h1>
+        <p class="text-sm text-zinc-500 dark:text-zinc-400">Progression par compétence, historique des exercices et points à travailler.</p>
+    </div>
+
+    <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 mb-6">
+        <h2 class="font-semibold text-sm mb-2">Profil établi par le professeur IA</h2>
+        <p class="text-sm text-zinc-600 dark:text-zinc-300">{{ overview.profile }}</p>
+        {% if tags %}
+        <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-3">Erreurs récentes les plus fréquentes :
+            {% for t in tags %}<span class="inline-block px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 mr-1">{{ t.replace('_', ' ') }}</span>{% endfor %}
+        </p>
+        {% endif %}
+    </div>
+
+    {% for ax in overview.axes %}
+    <section class="mb-6">
+        <div class="flex items-baseline justify-between mb-2">
+            <h2 class="font-semibold">{{ ax.label }}</h2>
+            <span class="text-xs text-zinc-400">{{ ax.mastery }} %</span>
+        </div>
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800">
+            {% for s in ax.skills %}
+            <div class="flex items-center gap-4 px-4 py-3">
+                <div class="w-48 text-sm">{{ s.label }}</div>
+                <div class="flex-1 h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                    <div class="h-full {% if s.mastery >= 70 %}bg-emerald-500{% elif s.mastery >= 45 %}bg-amber-500{% else %}bg-rose-500{% endif %}" style="width: {{ s.mastery }}%"></div>
+                </div>
+                <div class="w-24 text-right text-xs text-zinc-500">Niv. {{ s.level }}/6 · {{ s.attempts }} ex.</div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+
+    <section class="mb-6">
+        <h2 class="font-semibold mb-2">Derniers exercices</h2>
+        {% if history %}
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800">
+            {% for h in history %}
+            <div class="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                <div>
+                    <div class="font-medium">{{ h.titre }}</div>
+                    <div class="text-xs text-zinc-500">{{ h.date }} · {{ h.skill }} · niveau {{ h.level }}{% if h.kind != 'atelier' %} · {{ 'bilan' if h.kind == 'bilan' else 'renforcement' }}{% endif %}{% if h.attempt_no == 2 %} · 2<sup>e</sup> essai{% endif %}</div>
+                </div>
+                <div class="font-semibold {% if h.score >= 70 %}text-emerald-600{% elif h.score >= 45 %}text-amber-600{% else %}text-rose-600{% endif %}">{{ h.score }} %</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-zinc-500">Aucun exercice pour l'instant.</p>
+        {% endif %}
+    </section>
+
+    {% if vocab %}
+    <section class="mb-6">
+        <h2 class="font-semibold mb-2">Vocabulaire appris</h2>
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800">
+            {% for v in vocab %}
+            <div class="px-4 py-2 text-sm"><strong>{{ v.word }}</strong> : {{ v.meaning }}</div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

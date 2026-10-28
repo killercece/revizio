@@ -3,7 +3,7 @@ Application Flask - Revizio
 Portail de revision multi-outils pour le college.
 """
 
-__version__ = '1.2.0'
+__version__ = '1.3.0'
 
 from flask import Flask, render_template, jsonify, request, g, url_for
 import sqlite3
@@ -62,6 +62,15 @@ TOOLS = [
         'url': '/histoire-geo/',
         'suivi_url': '/histoire-geo/suivi',
         'color': '#e67e22',
+    },
+    {
+        'id': 'francais',
+        'name': 'Français : analyse et rédaction',
+        'description': 'Entraînement adaptatif : analyse de texte, rédaction, vocabulaire, avec correction par l\'IA',
+        'icon': 'pen',
+        'url': '/francais/',
+        'suivi_url': '/francais/suivi',
+        'color': '#0d9488',
     },
 ]
 
@@ -281,6 +290,13 @@ def ask_proxy(system, user_content, max_tokens=600, list_key=None, temperature=N
                 )
                 return salvaged
         raise RuntimeError(f"JSON invalide renvoye par le proxy Claude: {e}")
+
+
+# === MODULE FRANCAIS ===
+# Tables, routes et moteur adaptatif vivent dans francais.py (blueprint).
+import francais
+francais.init(get_db, ask_proxy, DB_PATH)
+app.register_blueprint(francais.bp)
 
 
 # === ROUTES PORTAIL ===

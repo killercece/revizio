@@ -1,0 +1,111 @@
+{% set active_page = 'francais' %}
+{% extends "base.html" %}
+{% block title %}Français{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto" id="fr-app">
+
+    <!-- Accueil : parcours et competences -->
+    <div id="s-home">
+        <div class="mb-6">
+            <h1 class="text-2xl font-bold tracking-tight mb-1">Français : analyse et rédaction</h1>
+            <p class="text-sm text-zinc-500 dark:text-zinc-400">Des exercices courts qui s'adaptent à toi : plus durs quand tu réussis, plus ciblés quand tu bloques.</p>
+        </div>
+
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 mb-6">
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button id="btn-next" class="flex-1 inline-flex justify-center items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-medium px-6 py-3 rounded-lg transition-colors" type="button">
+                    <span id="btn-next-label">Commencer l'entraînement</span>
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </button>
+                <button id="btn-bilan" class="inline-flex justify-center items-center gap-2 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 font-medium px-6 py-3 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 transition-colors" type="button">Faire un bilan</button>
+            </div>
+            <p id="bilan-hint" class="text-xs text-zinc-400 mt-3"></p>
+        </div>
+
+        <details class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 mb-6">
+            <summary class="text-sm font-medium cursor-pointer">Ce que le professeur sait de toi</summary>
+            <p id="profile-text" class="text-sm text-zinc-600 dark:text-zinc-300 mt-3"></p>
+        </details>
+
+        <div id="axes" class="space-y-6"></div>
+        <p id="home-error" class="hidden text-sm text-red-500 mt-4"></p>
+    </div>
+
+    <!-- Attente (generation / correction) -->
+    <div id="s-loading" class="hidden">
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-10 text-center">
+            <svg class="w-10 h-10 mx-auto mb-5 text-violet-600 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.4 0 0 5.4 0 12h4z"/></svg>
+            <h2 class="text-lg font-bold mb-1" id="loading-title">Préparation…</h2>
+            <p class="text-sm text-zinc-500 dark:text-zinc-400" id="loading-sub">Cela peut prendre quelques secondes.</p>
+        </div>
+    </div>
+
+    <!-- Exercice -->
+    <div id="s-exo" class="hidden">
+        <button id="btn-quit" class="text-sm text-zinc-500 hover:text-violet-600 mb-4" type="button">&larr; Retour au parcours</button>
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+            <span id="exo-skill" class="text-xs font-medium px-2 py-1 rounded-full bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300"></span>
+            <span id="exo-level" class="text-xs font-medium px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"></span>
+            <span id="exo-kind" class="hidden text-xs font-medium px-2 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300"></span>
+        </div>
+        <h2 id="exo-title" class="text-xl font-bold mb-2"></h2>
+        <p id="exo-consigne" class="text-sm text-zinc-600 dark:text-zinc-300 mb-4"></p>
+
+        <figure class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 mb-6">
+            <blockquote id="exo-text" class="whitespace-pre-line text-[15px] leading-relaxed font-serif"></blockquote>
+            <figcaption id="exo-source" class="text-xs text-zinc-500 dark:text-zinc-400 mt-3"></figcaption>
+        </figure>
+
+        <div id="exo-questions" class="space-y-5"></div>
+
+        <button id="btn-submit" class="inline-flex w-full justify-center items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-medium px-6 py-3 rounded-lg transition-colors mt-6" type="button">Envoyer pour correction</button>
+        <p id="exo-error" class="hidden text-sm text-red-500 mt-3"></p>
+    </div>
+
+    <!-- Correction -->
+    <div id="s-feedback" class="hidden">
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 mb-5 text-center">
+            <div id="fb-score" class="text-4xl font-bold mb-1"></div>
+            <div id="fb-label" class="text-sm text-zinc-500 dark:text-zinc-400"></div>
+        </div>
+        <div id="fb-levels" class="space-y-2 mb-5"></div>
+        <div id="fb-questions" class="space-y-4 mb-5"></div>
+        <div class="grid gap-3 sm:grid-cols-2 mb-5">
+            <div class="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-4">
+                <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300 mb-1">Point fort</p>
+                <p id="fb-strong" class="text-sm"></p>
+            </div>
+            <div class="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 p-4">
+                <p class="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300 mb-1">Ta priorité</p>
+                <p id="fb-priority" class="text-sm"></p>
+            </div>
+        </div>
+        <div id="fb-words" class="hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 mb-5">
+            <p class="text-xs font-semibold uppercase tracking-wide text-zinc-500 mb-2">Mots à retenir</p>
+            <ul id="fb-words-list" class="text-sm space-y-1"></ul>
+        </div>
+        <div id="fb-models" class="hidden space-y-3 mb-5"></div>
+        <div class="flex flex-col sm:flex-row gap-3">
+            <button id="btn-retry" class="hidden flex-1 border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 font-medium px-6 py-3 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40" type="button">Améliorer ma réponse</button>
+            <button id="btn-reveal" class="hidden flex-1 border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 font-medium px-6 py-3 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800" type="button">Voir un corrigé modèle</button>
+            <button id="btn-continue" class="flex-1 bg-violet-600 hover:bg-violet-700 text-white font-medium px-6 py-3 rounded-lg" type="button">Exercice suivant</button>
+            <button id="btn-home" class="border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 font-medium px-6 py-3 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800" type="button">Parcours</button>
+        </div>
+        <p id="fb-error" class="hidden text-sm text-red-500 mt-3"></p>
+    </div>
+
+    <!-- Erreur -->
+    <div id="s-error" class="hidden">
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-10 text-center">
+            <h2 class="text-lg font-bold mb-1">Une erreur est survenue</h2>
+            <p id="error-msg" class="text-sm text-zinc-500 dark:text-zinc-400 mb-5"></p>
+            <button id="btn-error-home" class="bg-violet-600 hover:bg-violet-700 text-white font-medium px-6 py-3 rounded-lg" type="button">Retour au parcours</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/francais.js') }}"></script>
+{% endblock %}

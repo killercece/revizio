@@ -5,6 +5,7 @@ Portail de revision pour le college. Regroupe plusieurs outils interactifs pour 
 ## Outils disponibles
 
 - **Verbes Irreguliers** : Quiz interactif sur 53 verbes irreguliers anglais avec systeme de rounds, suivi parental et sauvegarde automatique
+- **Francais : analyse et redaction** (`/francais/`) : entrainement adaptatif de seconde. 12 competences en 4 axes (analyse de texte, redaction, vocabulaire, organisation des idees), 6 niveaux, exercices generes et corriges par l'IA, profil de l'eleve garde en memoire, bilan tous les 5 exercices, suivi parental (`/francais/suivi`). Code dans `francais.py` (moteur, routes) et `francais_data.py` (competences, niveaux, textes du domaine public). Tests : `python tests/test_francais.py` (base jetable, IA simulee).
 
 ## Installation
 
