@@ -49,6 +49,21 @@
         return data;
     }
 
+    // Generation et correction tournent en tache de fond cote serveur (le reverse
+    // proxy coupe a 30 s) : on interroge l'avancement jusqu'au resultat.
+    async function apiJob(url, body) {
+        const first = await api(url, body);
+        if (!first.job) return first;  // reponse immediate (ex. exercice deja en attente)
+        const deadline = Date.now() + 200000;
+        while (Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 2000));
+            const st = await api(`/api/fr/jobs/${first.job}`);
+            if (st.status === 'done') return st.result;
+            if (st.status === 'error') throw new Error(st.error);
+        }
+        throw new Error("L'IA met trop de temps à répondre. Réessaie.");
+    }
+
     function barColor(pct) {
         if (pct >= 70) return 'bg-emerald-500';
         if (pct >= 45) return 'bg-amber-500';
@@ -118,7 +133,7 @@
     async function startExercise(body) {
         loading('Le professeur prépare ton exercice…');
         try {
-            exercise = await api('/api/fr/next', body || {});
+            exercise = await apiJob('/api/fr/next', body || {});
             lastAnswers = {};
             renderExercise(false);
         } catch (e) {
@@ -185,7 +200,7 @@
         lastAnswers = answers;
         loading('Correction en cours…', 'Le professeur lit tes réponses avec attention.');
         try {
-            lastFeedback = await api(`/api/fr/exercises/${exercise.id}/correct`, { answers });
+            lastFeedback = await apiJob(`/api/fr/exercises/${exercise.id}/correct`, { answers });
             renderFeedback(lastFeedback);
         } catch (e) {
             // On garde les reponses : l'eleve peut renvoyer sans rien retaper.

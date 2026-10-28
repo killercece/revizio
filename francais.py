@@ -15,6 +15,7 @@ import json
 import logging
 import random
 import sqlite3
+import threading
 from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, render_template, request
@@ -30,6 +31,9 @@ logger = logging.getLogger(__name__)
 _deps = {}
 
 MAX_LEVEL = 6
+# Le reverse proxy PyDeploy coupe les requetes a 30 s : generation et correction
+# par l'IA tournent donc en tache de fond, le navigateur interroge /api/fr/jobs/<id>.
+JOB_STALE_SECONDS = 180
 BILAN_EVERY = 5
 BILAN_SKILLS = ['effet', 'citer', 'precision', 'phrase', 'connect', 'paragraphe',
                 'verbes', 'lexique']
@@ -54,7 +58,52 @@ def init(get_db, ask_proxy, db_path):
     """Branche le module sur l'app (connexion DB, proxy Claude) et cree les tables."""
     _deps['get_db'] = get_db
     _deps['ask_proxy'] = ask_proxy
+    _deps['db_path'] = db_path
     ensure_tables(db_path)
+
+
+class ApiError(Exception):
+    """Erreur metier d'une tache de fond, avec un message affichable a l'eleve."""
+
+    def __init__(self, message, status=400):
+        super().__init__(message)
+        self.status = status
+
+
+def _start_job(fn):
+    """Lance fn(conn) dans un thread et renvoie l'id de la tache.
+
+    Le resultat est stocke en base (et non en memoire) car plusieurs workers
+    gunicorn se partagent les requetes de polling.
+    """
+    db = _db()
+    db.execute("DELETE FROM fr_jobs WHERE created_at < ?",
+               ((datetime.now() - timedelta(days=1)).isoformat(),))
+    cur = db.execute("INSERT INTO fr_jobs (status, created_at) VALUES ('running', ?)",
+                     (datetime.now().isoformat(),))
+    db.commit()
+    job_id = cur.lastrowid
+
+    def runner():
+        conn = sqlite3.connect(_deps['db_path'], timeout=30)
+        conn.row_factory = sqlite3.Row
+        status, result, error = 'error', None, "Erreur inattendue, réessaie."
+        try:
+            result = json.dumps(fn(conn), ensure_ascii=False)
+            status, error = 'done', None
+        except ApiError as e:
+            error = str(e)
+        except Exception:
+            logger.exception("Erreur inattendue dans une tache francais")
+        try:
+            conn.execute("UPDATE fr_jobs SET status = ?, result = ?, error = ? WHERE id = ?",
+                         (status, result, error, job_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    threading.Thread(target=runner, daemon=True).start()
+    return job_id
 
 
 def ensure_tables(db_path):
@@ -104,6 +153,13 @@ def ensure_tables(db_path):
                 meaning TEXT NOT NULL,
                 seen INTEGER NOT NULL DEFAULT 1,
                 learned_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS fr_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                status TEXT NOT NULL,
+                result TEXT,
+                error TEXT,
+                created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_fr_attempts_ex ON fr_attempts(exercise_id);
             CREATE INDEX IF NOT EXISTS idx_fr_ex_skill ON fr_exercises(skill);
@@ -546,21 +602,25 @@ def api_next():
             "SELECT skill FROM fr_exercises ORDER BY id DESC LIMIT 1").fetchone()
         skill = pick_skill(_load_states(db), avoid=last['skill'] if last else None)
 
-    try:
-        ex_id = generate_exercise(db, skill, kind)
-    except RuntimeError as e:
-        logger.error(f"Erreur generation exercice francais: {e}")
-        return jsonify({'error': "Impossible de préparer l'exercice pour le moment. Réessaie."}), 502
-    # Un exercice laisse de cote ne doit pas reapparaitre comme "a reprendre"
-    db.execute("UPDATE fr_exercises SET status = 'skipped' WHERE status = 'pending' AND id != ?",
-               (ex_id,))
-    db.commit()
-    row = db.execute("SELECT * FROM fr_exercises WHERE id = ?", (ex_id,)).fetchone()
-    return jsonify(_client_exercise(row))
+    def make(conn):
+        try:
+            ex_id = generate_exercise(conn, skill, kind)
+        except RuntimeError as e:
+            logger.error(f"Erreur generation exercice francais: {e}")
+            raise ApiError("Impossible de préparer l'exercice pour le moment. Réessaie.", 502)
+        # Un exercice laisse de cote ne doit pas reapparaitre comme "a reprendre"
+        conn.execute("UPDATE fr_exercises SET status = 'skipped' "
+                     "WHERE status = 'pending' AND id != ?", (ex_id,))
+        conn.commit()
+        row = conn.execute("SELECT * FROM fr_exercises WHERE id = ?", (ex_id,)).fetchone()
+        return _client_exercise(row)
+
+    return jsonify({'job': _start_job(make)}), 202
 
 
 @bp.route('/api/fr/exercises/<int:ex_id>/correct', methods=['POST'])
 def api_correct(ex_id):
+    """Valide la demande puis corrige en tache de fond (voir _start_job)."""
     db = _db()
     row = db.execute("SELECT * FROM fr_exercises WHERE id = ?", (ex_id,)).fetchone()
     if row is None:
@@ -573,13 +633,46 @@ def api_correct(ex_id):
                for q in payload['questions']}
     if not any(answers.values()):
         return jsonify({'error': 'Écris au moins une réponse.'}), 400
+    done = db.execute("SELECT COUNT(*) AS c FROM fr_attempts WHERE exercise_id = ?",
+                      (ex_id,)).fetchone()['c']
+    if done >= 2:
+        return jsonify({'error': 'Cet exercice a déjà été corrigé deux fois.'}), 400
 
+    return jsonify({'job': _start_job(lambda conn: _run_correction(conn, ex_id, answers))}), 202
+
+
+@bp.route('/api/fr/jobs/<int:job_id>')
+def api_job(job_id):
+    """Etat d'une tache de fond : running, done (result) ou error."""
+    db = _db()
+    row = db.execute("SELECT * FROM fr_jobs WHERE id = ?", (job_id,)).fetchone()
+    if row is None:
+        return jsonify({'error': 'Tâche introuvable'}), 404
+    if row['status'] == 'running':
+        age = (datetime.now() - datetime.fromisoformat(row['created_at'])).total_seconds()
+        if age > JOB_STALE_SECONDS:
+            # Le worker a probablement ete redemarre pendant la tache
+            db.execute("UPDATE fr_jobs SET status = 'error', error = ? WHERE id = ?",
+                       ("L'IA a mis trop de temps à répondre. Réessaie.", job_id))
+            db.commit()
+            return jsonify({'status': 'error', 'error': "L'IA a mis trop de temps à répondre. Réessaie."})
+        return jsonify({'status': 'running'})
+    if row['status'] == 'done':
+        return jsonify({'status': 'done', 'result': json.loads(row['result'])})
+    return jsonify({'status': 'error', 'error': row['error']})
+
+
+def _run_correction(db, ex_id, answers):
+    """Corrige un exercice via l'IA, met a jour competences, profil et vocabulaire.
+    Renvoie la reponse destinee au navigateur ; leve ApiError en cas d'echec."""
+    row = db.execute("SELECT * FROM fr_exercises WHERE id = ?", (ex_id,)).fetchone()
+    payload = json.loads(row['payload'])
     prev = db.execute(
         "SELECT * FROM fr_attempts WHERE exercise_id = ? ORDER BY attempt_no", (ex_id,)
     ).fetchall()
     attempt_no = len(prev) + 1
     if attempt_no > 2:
-        return jsonify({'error': 'Cet exercice a déjà été corrigé deux fois.'}), 400
+        raise ApiError('Cet exercice a déjà été corrigé deux fois.')
 
     skills = json.loads(row['skills'])
     lines = [
@@ -607,9 +700,9 @@ def api_correct(ex_id):
                                 temperature=0.3)
     except RuntimeError as e:
         logger.error(f"Erreur correction francais: {e}")
-        return jsonify({'error': "La correction est indisponible pour le moment. Tes réponses sont gardées, réessaie."}), 502
+        raise ApiError("La correction est indisponible pour le moment. Tes réponses sont gardées, réessaie.", 502)
     if not isinstance(fb, dict) or not isinstance(fb.get('questions'), list):
-        return jsonify({'error': "Correction illisible, réessaie."}), 502
+        raise ApiError("Correction illisible, réessaie.", 502)
 
     by_id = {str(c.get('id')): c for c in fb['questions'] if isinstance(c, dict)}
     q_results = []
@@ -664,7 +757,7 @@ def api_correct(ex_id):
     db.commit()
 
     unlocked = attempt_no == 2 or overall >= 0.85
-    return jsonify({
+    return {
         'attempt_no': attempt_no,
         'score': round(overall * 100),
         'questions': q_results,
@@ -675,7 +768,7 @@ def api_correct(ex_id):
         'can_retry': attempt_no == 1 and overall < 0.85,
         'modele': modele if unlocked else None,
         'bilan_due': _exercises_since_last_bilan(db) >= BILAN_EVERY,
-    })
+    }
 
 
 @bp.route('/api/fr/exercises/<int:ex_id>/reveal', methods=['POST'])

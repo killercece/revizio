@@ -64,6 +64,31 @@ def test_pick_skill():
                or True for _ in range(5))
 
 
+class Resp:
+    def __init__(self, status, data):
+        self.status_code, self._data = status, data
+
+    def get_json(self):
+        return self._data
+
+
+def post(c, path, json=None):
+    """POST puis, si une tache de fond est lancee, attend son resultat."""
+    import time
+    r = c.post(path, json=json)
+    data = r.get_json()
+    if r.status_code != 202 or 'job' not in data:
+        return Resp(r.status_code, data)
+    for _ in range(100):
+        st = c.get(f"/api/fr/jobs/{data['job']}").get_json()
+        if st['status'] == 'done':
+            return Resp(200, st['result'])
+        if st['status'] == 'error':
+            return Resp(502, {'error': st['error']})
+        time.sleep(0.05)
+    raise AssertionError('tache de fond trop longue')
+
+
 GEN = {
     'titre': 'Cite avec précision',
     'consigne': 'Relève et explique.',
@@ -103,18 +128,18 @@ def test_routes():
     ov = c.get('/api/fr/overview').get_json()
     assert len(ov['axes']) == 4 and ov['pending_id'] is None
 
-    ex = c.post('/api/fr/next', json={'skill': 'effet'}).get_json()
+    ex = post(c, '/api/fr/next', json={'skill': 'effet'}).get_json()
     assert ex['skill'] == 'effet' and ex['level'] == 2
     assert 'attendu' not in json.dumps(ex)
     assert 'PROFIL' in calls[-1] and 'COMPÉTENCE CIBLÉE' in calls[-1]
 
     # reprise de l'exercice en attente
-    again = c.post('/api/fr/next', json={}).get_json()
+    again = post(c, '/api/fr/next', json={}).get_json()
     assert again['id'] == ex['id']
 
-    assert c.post(f"/api/fr/exercises/{ex['id']}/correct", json={'answers': {}}).status_code == 400
+    assert post(c, f"/api/fr/exercises/{ex['id']}/correct", json={'answers': {}}).status_code == 400
 
-    r = c.post(f"/api/fr/exercises/{ex['id']}/correct",
+    r = post(c, f"/api/fr/exercises/{ex['id']}/correct",
                json={'answers': {'1': 'Il pleut', '2': 'Triste.'}}).get_json()
     assert r['score'] == 90 and r['modele'] and not r['can_retry']
     # placement reussi : effet passe du niveau 2 au niveau 4
@@ -123,23 +148,23 @@ def test_routes():
     assert 'Profil mis à jour' in ov['profile']
 
     # echec du proxy a la correction : message propre, rien n'est enregistre
-    ex2 = c.post('/api/fr/next', json={'skill': 'plan', 'fresh': True}).get_json()
+    ex2 = post(c, '/api/fr/next', json={'skill': 'plan', 'fresh': True}).get_json()
 
     def boom(*a, **k):
         raise RuntimeError('proxy down')
     francais._deps['ask_proxy'] = boom
-    resp = c.post(f"/api/fr/exercises/{ex2['id']}/correct", json={'answers': {'1': 'x'}})
+    resp = post(c, f"/api/fr/exercises/{ex2['id']}/correct", json={'answers': {'1': 'x'}})
     assert resp.status_code == 502
 
     # premier essai moyen -> retry possible, corrige verrouille puis debloque
     francais._deps['ask_proxy'] = fake_proxy
     answers['corr'] = corr(0.5, {'plan': 0.5})
-    r1 = c.post(f"/api/fr/exercises/{ex2['id']}/correct", json={'answers': {'1': 'x'}}).get_json()
+    r1 = post(c, f"/api/fr/exercises/{ex2['id']}/correct", json={'answers': {'1': 'x'}}).get_json()
     assert r1['can_retry'] and r1['modele'] is None
     assert c.post(f"/api/fr/exercises/{ex2['id']}/reveal").get_json()['modele']
-    r2 = c.post(f"/api/fr/exercises/{ex2['id']}/correct", json={'answers': {'1': 'mieux'}}).get_json()
+    r2 = post(c, f"/api/fr/exercises/{ex2['id']}/correct", json={'answers': {'1': 'mieux'}}).get_json()
     assert r2['attempt_no'] == 2 and r2['modele']
-    assert c.post(f"/api/fr/exercises/{ex2['id']}/correct", json={'answers': {'1': 'z'}}).status_code == 400
+    assert post(c, f"/api/fr/exercises/{ex2['id']}/correct", json={'answers': {'1': 'z'}}).status_code == 400
 
     # le prompt de correction du 2e essai reprend le premier essai
     assert 'PREMIER ESSAI' in calls[-1]
@@ -147,17 +172,17 @@ def test_routes():
     # un bilan se declenche apres BILAN_EVERY exercices termines
     answers['corr'] = corr(0.7, {s: 0.7 for s in francais.BILAN_SKILLS})
     for _ in range(francais.BILAN_EVERY):
-        e = c.post('/api/fr/next', json={'skill': 'figures', 'fresh': True}).get_json()
-        c.post(f"/api/fr/exercises/{e['id']}/correct", json={'answers': {'1': 'a'}})
+        e = post(c, '/api/fr/next', json={'skill': 'figures', 'fresh': True}).get_json()
+        post(c, f"/api/fr/exercises/{e['id']}/correct", json={'answers': {'1': 'a'}})
     assert c.get('/api/fr/overview').get_json()['bilan_due']
-    b = c.post('/api/fr/next', json={'fresh': True}).get_json()
+    b = post(c, '/api/fr/next', json={'fresh': True}).get_json()
     assert b['kind'] == 'bilan'
 
     # exercice invalide renvoye par l'IA -> 502 propre
     answers['gen'] = {'titre': 'x', 'questions': []}
-    assert c.post('/api/fr/next', json={'skill': 'pdv', 'fresh': True}).status_code == 502
+    assert post(c, '/api/fr/next', json={'skill': 'pdv', 'fresh': True}).status_code == 502
 
-    assert c.post('/api/fr/next', json={'skill': 'inconnue'}).status_code == 400
+    assert post(c, '/api/fr/next', json={'skill': 'inconnue'}).status_code == 400
 
 
 if __name__ == '__main__':
