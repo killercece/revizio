@@ -16,6 +16,7 @@ import logging
 import random
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, render_template, request
@@ -34,6 +35,7 @@ MAX_LEVEL = 6
 # Le reverse proxy PyDeploy coupe les requetes a 30 s : generation et correction
 # par l'IA tournent donc en tache de fond, le navigateur interroge /api/fr/jobs/<id>.
 JOB_STALE_SECONDS = 180
+RETRY_DELAY_SECONDS = 2
 BILAN_EVERY = 5
 BILAN_SKILLS = ['effet', 'citer', 'precision', 'phrase', 'orthographe', 'connect',
                 'paragraphe', 'verbes', 'lexique']
@@ -68,6 +70,17 @@ class ApiError(Exception):
     def __init__(self, message, status=400):
         super().__init__(message)
         self.status = status
+
+
+def _ask(*args, **kwargs):
+    """Appel IA avec une seconde tentative : le proxy coupe parfois la connexion
+    sans reponse, un nouvel essai passe presque toujours."""
+    try:
+        return _deps['ask_proxy'](*args, **kwargs)
+    except RuntimeError as e:
+        logger.warning(f"Appel IA echoue, nouvel essai : {e}")
+        time.sleep(RETRY_DELAY_SECONDS)
+        return _deps['ask_proxy'](*args, **kwargs)
 
 
 def _start_job(fn):
@@ -414,7 +427,7 @@ def generate_exercise(db, skill_id, kind='atelier', force_new_level=None):
             "dans passage.source « Texte original écrit pour l'exercice (dans l'esprit "
             "de <auteur>) ». Retour à la ligne pour les vers.")
 
-    data = _deps['ask_proxy'](GEN_SYSTEM, "\n\n".join(lines), max_tokens=2500,
+    data = _ask(GEN_SYSTEM, "\n\n".join(lines), max_tokens=2500,
                               temperature=0.9)
     if not isinstance(data, dict):
         raise RuntimeError("Exercice invalide renvoyé par l'IA")
@@ -756,7 +769,7 @@ def _run_correction(db, ex_id, answers):
                      f"RÉPONSE DE L'ÉLÈVE : {answers[str(q['id'])] or '(vide)'}")
 
     try:
-        fb = _deps['ask_proxy'](CORR_SYSTEM, "\n\n".join(lines), max_tokens=4000,
+        fb = _ask(CORR_SYSTEM, "\n\n".join(lines), max_tokens=4000,
                                 temperature=0.3)
     except RuntimeError as e:
         logger.error(f"Erreur correction francais: {e}")

@@ -163,6 +163,21 @@ def test_routes():
     # echec du proxy a la correction : message propre, rien n'est enregistre
     ex2 = post(c, '/api/fr/next', json={'skill': 'plan', 'fresh': True}).get_json()
 
+    # un incident passager du proxy est absorbe par la seconde tentative
+    flaky = {'n': 0}
+
+    def flaky_proxy(*a, **k):
+        flaky['n'] += 1
+        if flaky['n'] == 1:
+            raise RuntimeError('connexion coupee')
+        return fake_proxy(*a, **k)
+    francais._deps['ask_proxy'] = flaky_proxy
+    francais.RETRY_DELAY_SECONDS = 0
+    ok = post(c, f"/api/fr/exercises/{ex2['id']}/correct", json={'answers': {'1': 'x'}})
+    assert ok.status_code == 200 and flaky['n'] == 2
+    # ... on repart d'un exercice neuf pour la suite du scenario
+    ex2 = post(c, '/api/fr/next', json={'skill': 'plan', 'fresh': True}).get_json()
+
     def boom(*a, **k):
         raise RuntimeError('proxy down')
     francais._deps['ask_proxy'] = boom
