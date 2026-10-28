@@ -3,6 +3,18 @@
  * Theme toggle (class-based pour Tailwind), burger menu.
  */
 
+// Session expiree ou retiree : toute reponse 401 renvoie vers la page de connexion.
+(function () {
+    const nativeFetch = window.fetch;
+    window.fetch = async function (...args) {
+        const resp = await nativeFetch.apply(this, args);
+        if (resp.status === 401) {
+            window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+        }
+        return resp;
+    };
+})();
+
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     initBurgerMenu();

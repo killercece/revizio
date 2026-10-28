@@ -14,6 +14,7 @@ sys.path.insert(0, ROOT)
 os.chdir(tempfile.mkdtemp())
 os.makedirs('data')
 
+os.environ['REVIZIO_AUTH_DISABLED'] = '1'  # ce fichier teste le module, pas la connexion (voir test_auth.py)
 import app as revizio  # noqa: E402  (cree la base jetable dans le cwd)
 import francais  # noqa: E402
 

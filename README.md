@@ -41,3 +41,11 @@ revizio/
     ├── verbs_suivi.html # Suivi verbes
     └── suivi.html       # Suivi global
 ```
+
+## Securite (connexion Google)
+
+Toutes les pages et API exigent une session, sauf `/login`, `/auth/*`, `/static/*` et `/api/health`. La connexion passe par Google (OpenID Connect) et n'admet que les adresses de `ALLOWED_EMAILS` (e-mail verifie par Google). Sans identifiants Google configures, tout reste ferme.
+
+Variables d'environnement (PyDeploy) : `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_EMAILS` (adresses separees par des virgules), `PUBLIC_URL` (optionnelle, defaut `https://revizio.cdtechnology.fr`), `SECRET_KEY` (optionnelle : sinon une cle aleatoire est creee dans `data/.secret_key`). Adresse de retour a declarer chez Google : `<PUBLIC_URL>/auth/callback`.
+
+En local : `REVIZIO_AUTH_DISABLED=1` desactive la protection, `REVIZIO_INSECURE_COOKIES=1` autorise le http. Tests : `python tests/test_auth.py`.

@@ -3,7 +3,7 @@ Application Flask - Revizio
 Portail de revision multi-outils pour le college.
 """
 
-__version__ = '1.4.0'
+__version__ = '1.5.0'
 
 from flask import Flask, render_template, jsonify, request, g, url_for
 import sqlite3
@@ -26,7 +26,11 @@ logger = logging.getLogger(__name__)
 
 # Initialiser Flask
 app = Flask(__name__)
-app.secret_key = 'revizio-portal-secret-key'
+
+# Connexion Google + liste blanche : protege toutes les pages et les API (auth.py).
+# La cle de session vient de SECRET_KEY ou d'un fichier aleatoire dans data/.
+import auth
+auth.init_app(app, Path('data'))
 
 
 @app.context_processor
