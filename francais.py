@@ -26,6 +26,8 @@ from francais_data import (
     ORIGINAL_THEMES,
 )
 
+import auth
+
 bp = Blueprint('francais', __name__)
 logger = logging.getLogger(__name__)
 
@@ -56,12 +58,17 @@ INITIAL_PROFILE = (
 )
 
 
-def init(get_db, ask_proxy, db_path):
-    """Branche le module sur l'app (connexion DB, proxy Claude) et cree les tables."""
+GENERIC_PROFILE = "Élève de seconde, profil à établir au fil des exercices."
+
+
+def init(get_db, ask_proxy, db_path, legacy_owner):
+    """Branche le module sur l'app (connexion DB, proxy Claude) et cree les tables.
+    Les donnees creees avant les comptes sont rattachees a `legacy_owner`."""
     _deps['get_db'] = get_db
     _deps['ask_proxy'] = ask_proxy
     _deps['db_path'] = db_path
-    ensure_tables(db_path)
+    _deps['legacy_owner'] = legacy_owner
+    ensure_tables(db_path, legacy_owner)
 
 
 class ApiError(Exception):
@@ -83,8 +90,8 @@ def _ask(*args, **kwargs):
         return _deps['ask_proxy'](*args, **kwargs)
 
 
-def _start_job(fn):
-    """Lance fn(conn) dans un thread et renvoie l'id de la tache.
+def _start_job(user, fn):
+    """Lance fn(conn) dans un thread pour `user` et renvoie l'id de la tache.
 
     Le resultat est stocke en base (et non en memoire) car plusieurs workers
     gunicorn se partagent les requetes de polling.
@@ -92,8 +99,8 @@ def _start_job(fn):
     db = _db()
     db.execute("DELETE FROM fr_jobs WHERE created_at < ?",
                ((datetime.now() - timedelta(days=1)).isoformat(),))
-    cur = db.execute("INSERT INTO fr_jobs (status, created_at) VALUES ('running', ?)",
-                     (datetime.now().isoformat(),))
+    cur = db.execute("INSERT INTO fr_jobs (user_email, status, created_at) "
+                     "VALUES (?, 'running', ?)", (user, datetime.now().isoformat()))
     db.commit()
     job_id = cur.lastrowid
 
@@ -119,73 +126,135 @@ def _start_job(fn):
     return job_id
 
 
-def ensure_tables(db_path):
-    """Cree les tables du module (idempotent, ne touche pas aux autres outils)."""
-    conn = sqlite3.connect(db_path, timeout=30)
+SCHEMA = [
+    """CREATE TABLE IF NOT EXISTS fr_skill_state (
+        user_email TEXT NOT NULL,
+        skill TEXT NOT NULL,
+        mastery REAL NOT NULL DEFAULT 0.3,
+        level INTEGER NOT NULL DEFAULT 2,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        streak_good INTEGER NOT NULL DEFAULT 0,
+        streak_bad INTEGER NOT NULL DEFAULT 0,
+        remediate INTEGER NOT NULL DEFAULT 0,
+        last_at TEXT,
+        next_review TEXT,
+        PRIMARY KEY (user_email, skill)
+    )""",
+    """CREATE TABLE IF NOT EXISTS fr_exercises (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_email TEXT,
+        skill TEXT NOT NULL,
+        level INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        passage_id TEXT,
+        skills TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL,
+        completed_at TEXT
+    )""",
+    """CREATE TABLE IF NOT EXISTS fr_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exercise_id INTEGER NOT NULL REFERENCES fr_exercises(id),
+        attempt_no INTEGER NOT NULL,
+        answers TEXT NOT NULL,
+        score REAL NOT NULL,
+        feedback TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS fr_profile (
+        user_email TEXT PRIMARY KEY,
+        summary TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS fr_vocab (
+        user_email TEXT NOT NULL,
+        word TEXT NOT NULL,
+        meaning TEXT NOT NULL,
+        seen INTEGER NOT NULL DEFAULT 1,
+        learned_at TEXT NOT NULL,
+        PRIMARY KEY (user_email, word)
+    )""",
+    """CREATE TABLE IF NOT EXISTS fr_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_email TEXT NOT NULL,
+        status TEXT NOT NULL,
+        result TEXT,
+        error TEXT,
+        created_at TEXT NOT NULL
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_fr_attempts_ex ON fr_attempts(exercise_id)",
+]
+
+
+def _columns(conn, table):
+    return [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+
+
+def ensure_tables(db_path, legacy_owner):
+    """Cree les tables du module (idempotent, ne touche pas aux autres outils) et
+    migre l'ancien schema commun vers un schema par utilisateur.
+
+    BEGIN IMMEDIATE serialise les workers gunicorn qui demarrent ensemble.
+    """
+    conn = sqlite3.connect(db_path, timeout=30, isolation_level=None)
     try:
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS fr_skill_state (
-                skill TEXT PRIMARY KEY,
-                mastery REAL NOT NULL DEFAULT 0.3,
-                level INTEGER NOT NULL DEFAULT 2,
-                attempts INTEGER NOT NULL DEFAULT 0,
-                streak_good INTEGER NOT NULL DEFAULT 0,
-                streak_bad INTEGER NOT NULL DEFAULT 0,
-                remediate INTEGER NOT NULL DEFAULT 0,
-                last_at TEXT,
-                next_review TEXT
-            );
-            CREATE TABLE IF NOT EXISTS fr_exercises (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                skill TEXT NOT NULL,
-                level INTEGER NOT NULL,
-                kind TEXT NOT NULL,
-                passage_id TEXT,
-                skills TEXT NOT NULL,
-                payload TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
-                created_at TEXT NOT NULL,
-                completed_at TEXT
-            );
-            CREATE TABLE IF NOT EXISTS fr_attempts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                exercise_id INTEGER NOT NULL REFERENCES fr_exercises(id),
-                attempt_no INTEGER NOT NULL,
-                answers TEXT NOT NULL,
-                score REAL NOT NULL,
-                feedback TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS fr_profile (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                summary TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS fr_vocab (
-                word TEXT PRIMARY KEY,
-                meaning TEXT NOT NULL,
-                seen INTEGER NOT NULL DEFAULT 1,
-                learned_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS fr_jobs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                status TEXT NOT NULL,
-                result TEXT,
-                error TEXT,
-                created_at TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_fr_attempts_ex ON fr_attempts(exercise_id);
-            CREATE INDEX IF NOT EXISTS idx_fr_ex_skill ON fr_exercises(skill);
-        """)
-        for sid in SKILL_IDS:
-            conn.execute("INSERT OR IGNORE INTO fr_skill_state (skill) VALUES (?)", (sid,))
-        conn.execute(
-            "INSERT OR IGNORE INTO fr_profile (id, summary, updated_at) VALUES (1, ?, ?)",
-            (INITIAL_PROFILE, datetime.now().isoformat()),
-        )
-        conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        # 1. anciennes tables sans proprietaire : mises de cote avant recreation
+        old = [t for t in ('fr_skill_state', 'fr_profile', 'fr_vocab')
+               if _columns(conn, t) and 'user_email' not in _columns(conn, t)]
+        for t in old:
+            conn.execute(f"ALTER TABLE {t} RENAME TO {t}_old")
+        if _columns(conn, 'fr_jobs') and 'user_email' not in _columns(conn, 'fr_jobs'):
+            conn.execute("DROP TABLE fr_jobs")  # taches ephemeres : rien a conserver
+        for statement in SCHEMA:
+            conn.execute(statement)
+        # 2. historique existant rattache au proprietaire d'origine
+        if 'fr_skill_state' in old:
+            conn.execute("""
+                INSERT INTO fr_skill_state (user_email, skill, mastery, level, attempts,
+                    streak_good, streak_bad, remediate, last_at, next_review)
+                SELECT ?, skill, mastery, level, attempts, streak_good, streak_bad,
+                    remediate, last_at, next_review FROM fr_skill_state_old
+            """, (legacy_owner,))
+        if 'fr_profile' in old:
+            conn.execute("INSERT INTO fr_profile (user_email, summary, updated_at) "
+                         "SELECT ?, summary, updated_at FROM fr_profile_old WHERE id = 1",
+                         (legacy_owner,))
+        if 'fr_vocab' in old:
+            conn.execute("INSERT INTO fr_vocab (user_email, word, meaning, seen, learned_at) "
+                         "SELECT ?, word, meaning, seen, learned_at FROM fr_vocab_old",
+                         (legacy_owner,))
+        for t in old:
+            conn.execute(f"DROP TABLE {t}_old")
+        if 'user_email' not in _columns(conn, 'fr_exercises'):
+            conn.execute("ALTER TABLE fr_exercises ADD COLUMN user_email TEXT")
+        conn.execute("UPDATE fr_exercises SET user_email = ? WHERE user_email IS NULL",
+                     (legacy_owner,))
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fr_ex_user "
+                     "ON fr_exercises(user_email, status)")
+        conn.execute("COMMIT")
+    except sqlite3.Error:
+        conn.execute("ROLLBACK")
+        raise
     finally:
         conn.close()
+
+
+def _ensure_user(db, user):
+    """Cree l'etat initial d'un utilisateur la premiere fois qu'on le voit."""
+    have = db.execute("SELECT COUNT(*) AS c FROM fr_skill_state WHERE user_email = ?",
+                      (user,)).fetchone()['c']
+    if have == len(SKILL_IDS) and db.execute(
+            "SELECT 1 FROM fr_profile WHERE user_email = ?", (user,)).fetchone():
+        return
+    # Premiere visite, ou competence ajoutee depuis : on complete sans toucher a l'existant
+    profile = INITIAL_PROFILE if user == _deps.get('legacy_owner') else GENERIC_PROFILE
+    db.executemany("INSERT OR IGNORE INTO fr_skill_state (user_email, skill) VALUES (?, ?)",
+                   [(user, sid) for sid in SKILL_IDS])
+    db.execute("INSERT OR IGNORE INTO fr_profile (user_email, summary, updated_at) "
+               "VALUES (?, ?, ?)", (user, profile, datetime.now().isoformat()))
+    db.commit()
 
 
 # === MOTEUR ADAPTATIF (fonctions pures, testables) ===
@@ -281,27 +350,35 @@ def _db():
     return _deps['get_db']()
 
 
-def _load_states(db):
-    return {r['skill']: dict(r) for r in db.execute("SELECT * FROM fr_skill_state")}
+def _load_states(db, user):
+    _ensure_user(db, user)
+    return {r['skill']: dict(r) for r in db.execute(
+        "SELECT * FROM fr_skill_state WHERE user_email = ?", (user,))}
 
 
-def _save_state(db, st):
+def _save_state(db, user, st):
     db.execute("""
         UPDATE fr_skill_state SET mastery=?, level=?, attempts=?, streak_good=?,
-            streak_bad=?, remediate=?, last_at=?, next_review=? WHERE skill=?
+            streak_bad=?, remediate=?, last_at=?, next_review=?
+        WHERE skill=? AND user_email=?
     """, (st['mastery'], st['level'], st['attempts'], st['streak_good'],
-          st['streak_bad'], st['remediate'], st['last_at'], st['next_review'], st['skill']))
+          st['streak_bad'], st['remediate'], st['last_at'], st['next_review'],
+          st['skill'], user))
 
 
-def _profile(db):
-    row = db.execute("SELECT summary FROM fr_profile WHERE id = 1").fetchone()
-    return row['summary'] if row else INITIAL_PROFILE
+def _profile(db, user):
+    _ensure_user(db, user)
+    row = db.execute("SELECT summary FROM fr_profile WHERE user_email = ?", (user,)).fetchone()
+    return row['summary'] if row else GENERIC_PROFILE
 
 
-def _recent_error_tags(db, limit=6):
-    """Erreurs les plus frequentes dans les derniers essais."""
+def _recent_error_tags(db, user, limit=6):
+    """Erreurs les plus frequentes dans les derniers essais de l'utilisateur."""
     counts = {}
-    for r in db.execute("SELECT feedback FROM fr_attempts ORDER BY id DESC LIMIT ?", (limit,)):
+    for r in db.execute("""
+            SELECT a.feedback FROM fr_attempts a
+            JOIN fr_exercises e ON e.id = a.exercise_id
+            WHERE e.user_email = ? ORDER BY a.id DESC LIMIT ?""", (user, limit)):
         try:
             for tag in json.loads(r['feedback']).get('erreurs', []):
                 counts[tag] = counts.get(tag, 0) + 1
@@ -310,13 +387,14 @@ def _recent_error_tags(db, limit=6):
     return [t for t, _ in sorted(counts.items(), key=lambda kv: -kv[1])[:4]]
 
 
-def _exercises_since_last_bilan(db):
+def _exercises_since_last_bilan(db, user):
     last = db.execute(
-        "SELECT MAX(id) AS m FROM fr_exercises WHERE kind = 'bilan' AND status = 'done'"
+        "SELECT MAX(id) AS m FROM fr_exercises "
+        "WHERE kind = 'bilan' AND status = 'done' AND user_email = ?", (user,)
     ).fetchone()['m'] or 0
     return db.execute(
-        "SELECT COUNT(*) AS c FROM fr_exercises WHERE status = 'done' AND kind != 'bilan' AND id > ?",
-        (last,)
+        "SELECT COUNT(*) AS c FROM fr_exercises WHERE status = 'done' AND kind != 'bilan' "
+        "AND id > ? AND user_email = ?", (last, user)
     ).fetchone()['c']
 
 
@@ -343,12 +421,13 @@ GEN_SYSTEM = (
 )
 
 
-def _choose_passage(db, skill_id, kind):
+def _choose_passage(db, user, skill_id, kind):
     """Renvoie un passage classique non encore utilise pour cette competence, ou None
     (l'IA ecrira alors un texte original, signale comme tel)."""
     used = {r['passage_id'] for r in db.execute(
-        "SELECT passage_id FROM fr_exercises WHERE skill = ? AND passage_id IS NOT NULL",
-        (skill_id,))}
+        "SELECT passage_id FROM fr_exercises "
+        "WHERE skill = ? AND user_email = ? AND passage_id IS NOT NULL",
+        (skill_id, user))}
     pool = [p for p in PASSAGES if p['id'] not in used]
     if skill_id in ('pdv', 'recit'):
         pool = [p for p in pool if p['genre'] == 'prose']
@@ -359,9 +438,9 @@ def _choose_passage(db, skill_id, kind):
     return None
 
 
-def generate_exercise(db, skill_id, kind='atelier', force_new_level=None):
+def generate_exercise(db, user, skill_id, kind='atelier', force_new_level=None):
     """Genere (et enregistre) un exercice via l'IA. Leve RuntimeError en cas d'echec."""
-    states = _load_states(db)
+    states = _load_states(db, user)
     if kind == 'bilan':
         core = [states[s]['level'] for s in ('effet', 'citer', 'paragraphe', 'precision')]
         level = max(2, min(MAX_LEVEL, round(sum(core) / len(core))))
@@ -374,7 +453,7 @@ def generate_exercise(db, skill_id, kind='atelier', force_new_level=None):
         if st['remediate']:
             kind = 'remediation'
 
-    passage = _choose_passage(db, skill_id, kind)
+    passage = _choose_passage(db, user, skill_id, kind)
     lines = []
     if kind == 'bilan':
         lines.append(
@@ -395,17 +474,19 @@ def generate_exercise(db, skill_id, kind='atelier', force_new_level=None):
                 "consigne.")
     lines.append(LEVELS[level])
     lines.append(f"CONTEXTE DE CLASSE : {CLASS_CONTEXT}")
-    lines.append(f"PROFIL DE L'ÉLÈVE : {_profile(db)}")
-    tags = _recent_error_tags(db)
+    lines.append(f"PROFIL DE L'ÉLÈVE : {_profile(db, user)}")
+    tags = _recent_error_tags(db, user)
     if tags:
         lines.append("ERREURS RÉCURRENTES À CIBLER : " + ", ".join(tags))
     words = [r['word'] for r in db.execute(
-        "SELECT word FROM fr_vocab ORDER BY learned_at DESC LIMIT 6")]
+        "SELECT word FROM fr_vocab WHERE user_email = ? ORDER BY learned_at DESC LIMIT 6",
+        (user,))]
     if words:
         lines.append("MOTS RÉCEMMENT APPRIS (réemploie-en un ou deux si naturel) : "
                      + ", ".join(words))
     recent = [r['payload'] for r in db.execute(
-        "SELECT payload FROM fr_exercises ORDER BY id DESC LIMIT 6")]
+        "SELECT payload FROM fr_exercises WHERE user_email = ? ORDER BY id DESC LIMIT 6",
+        (user,))]
     titles = []
     for p in recent:
         try:
@@ -457,11 +538,13 @@ def generate_exercise(db, skill_id, kind='atelier', force_new_level=None):
         'questions': questions,
     }
     if kind != 'bilan':
-        db.execute("UPDATE fr_skill_state SET remediate = 0 WHERE skill = ?", (skill_id,))
+        db.execute("UPDATE fr_skill_state SET remediate = 0 WHERE skill = ? AND user_email = ?",
+                   (skill_id, user))
     cur = db.execute("""
-        INSERT INTO fr_exercises (skill, level, kind, passage_id, skills, payload, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (skill_id, level, kind, passage['id'] if passage else None,
+        INSERT INTO fr_exercises (user_email, skill, level, kind, passage_id, skills,
+                                  payload, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (user, skill_id, level, kind, passage['id'] if passage else None,
           json.dumps(skills), json.dumps(payload, ensure_ascii=False),
           datetime.now().isoformat()))
     db.commit()
@@ -585,8 +668,8 @@ def _clamp01(v, default=0.0):
         return default
 
 
-def _build_overview(db):
-    states = _load_states(db)
+def _build_overview(db, user):
+    states = _load_states(db, user)
     axes = []
     for ax in AXES:
         skills = []
@@ -602,12 +685,13 @@ def _build_overview(db):
         avg = round(sum(x['mastery'] for x in skills) / len(skills))
         axes.append({'id': ax['id'], 'label': ax['label'], 'mastery': avg, 'skills': skills})
     pending = db.execute(
-        "SELECT id FROM fr_exercises WHERE status = 'pending' ORDER BY id DESC LIMIT 1"
+        "SELECT id FROM fr_exercises WHERE status = 'pending' AND user_email = ? "
+        "ORDER BY id DESC LIMIT 1", (user,)
     ).fetchone()
-    since = _exercises_since_last_bilan(db)
+    since = _exercises_since_last_bilan(db, user)
     return {
         'axes': axes,
-        'profile': _profile(db),
+        'profile': _profile(db, user),
         'pending_id': pending['id'] if pending else None,
         'since_bilan': since,
         'bilan_due': since >= BILAN_EVERY,
@@ -625,12 +709,14 @@ def fr_home():
 @bp.route('/francais/suivi')
 def fr_suivi():
     db = _db()
+    viewed = auth.viewed_email()
     history = []
     for r in db.execute("""
         SELECT a.score, a.attempt_no, a.created_at, e.skill, e.level, e.kind, e.payload
         FROM fr_attempts a JOIN fr_exercises e ON e.id = a.exercise_id
+        WHERE e.user_email = ?
         ORDER BY a.id DESC LIMIT 40
-    """):
+    """, (viewed,)):
         history.append({
             'date': r['created_at'][:16].replace('T', ' '),
             'titre': json.loads(r['payload']).get('titre', ''),
@@ -639,14 +725,16 @@ def fr_suivi():
             'score': round(r['score'] * 100),
         })
     vocab = [dict(r) for r in db.execute(
-        "SELECT word, meaning FROM fr_vocab ORDER BY learned_at DESC LIMIT 40")]
-    return render_template('francais_suivi.html', overview=_build_overview(db),
-                           history=history, vocab=vocab, tags=_recent_error_tags(db, 12))
+        "SELECT word, meaning FROM fr_vocab WHERE user_email = ? "
+        "ORDER BY learned_at DESC LIMIT 40", (viewed,))]
+    return render_template('francais_suivi.html', overview=_build_overview(db, viewed),
+                           history=history, vocab=vocab,
+                           tags=_recent_error_tags(db, viewed, 12))
 
 
 @bp.route('/api/fr/overview')
 def api_overview():
-    return jsonify(_build_overview(_db()))
+    return jsonify(_build_overview(_db(), auth.owner_email()))
 
 
 @bp.route('/api/fr/next', methods=['POST'])
@@ -658,46 +746,51 @@ def api_next():
     """
     data = request.get_json(silent=True) or {}
     db = _db()
+    user = auth.owner_email()
     skill = data.get('skill')
     if skill is not None and skill not in SKILL_BY_ID:
         return jsonify({'error': 'Compétence inconnue'}), 400
 
     if not data.get('fresh') and not skill and not data.get('bilan'):
         row = db.execute(
-            "SELECT * FROM fr_exercises WHERE status = 'pending' ORDER BY id DESC LIMIT 1"
+            "SELECT * FROM fr_exercises WHERE status = 'pending' AND user_email = ? "
+            "ORDER BY id DESC LIMIT 1", (user,)
         ).fetchone()
         if row:
             return jsonify(_client_exercise(row))
 
     kind = 'atelier'
-    if data.get('bilan') or (not skill and _exercises_since_last_bilan(db) >= BILAN_EVERY):
+    if data.get('bilan') or (not skill and _exercises_since_last_bilan(db, user) >= BILAN_EVERY):
         kind = 'bilan'
     elif not skill:
         last = db.execute(
-            "SELECT skill FROM fr_exercises ORDER BY id DESC LIMIT 1").fetchone()
-        skill = pick_skill(_load_states(db), avoid=last['skill'] if last else None)
+            "SELECT skill FROM fr_exercises WHERE user_email = ? ORDER BY id DESC LIMIT 1",
+            (user,)).fetchone()
+        skill = pick_skill(_load_states(db, user), avoid=last['skill'] if last else None)
 
     def make(conn):
         try:
-            ex_id = generate_exercise(conn, skill, kind)
+            ex_id = generate_exercise(conn, user, skill, kind)
         except RuntimeError as e:
             logger.error(f"Erreur generation exercice francais: {e}")
             raise ApiError("Impossible de préparer l'exercice pour le moment. Réessaie.", 502)
         # Un exercice laisse de cote ne doit pas reapparaitre comme "a reprendre"
         conn.execute("UPDATE fr_exercises SET status = 'skipped' "
-                     "WHERE status = 'pending' AND id != ?", (ex_id,))
+                     "WHERE status = 'pending' AND id != ? AND user_email = ?", (ex_id, user))
         conn.commit()
         row = conn.execute("SELECT * FROM fr_exercises WHERE id = ?", (ex_id,)).fetchone()
         return _client_exercise(row)
 
-    return jsonify({'job': _start_job(make)}), 202
+    return jsonify({'job': _start_job(user, make)}), 202
 
 
 @bp.route('/api/fr/exercises/<int:ex_id>/correct', methods=['POST'])
 def api_correct(ex_id):
     """Valide la demande puis corrige en tache de fond (voir _start_job)."""
     db = _db()
-    row = db.execute("SELECT * FROM fr_exercises WHERE id = ?", (ex_id,)).fetchone()
+    user = auth.owner_email()
+    row = db.execute("SELECT * FROM fr_exercises WHERE id = ? AND user_email = ?",
+                     (ex_id, user)).fetchone()
     if row is None:
         return jsonify({'error': 'Exercice introuvable'}), 404
 
@@ -713,14 +806,16 @@ def api_correct(ex_id):
     if done >= 2:
         return jsonify({'error': 'Cet exercice a déjà été corrigé deux fois.'}), 400
 
-    return jsonify({'job': _start_job(lambda conn: _run_correction(conn, ex_id, answers))}), 202
+    return jsonify({'job': _start_job(
+        user, lambda conn: _run_correction(conn, user, ex_id, answers))}), 202
 
 
 @bp.route('/api/fr/jobs/<int:job_id>')
 def api_job(job_id):
     """Etat d'une tache de fond : running, done (result) ou error."""
     db = _db()
-    row = db.execute("SELECT * FROM fr_jobs WHERE id = ?", (job_id,)).fetchone()
+    row = db.execute("SELECT * FROM fr_jobs WHERE id = ? AND user_email = ?",
+                     (job_id, auth.owner_email())).fetchone()
     if row is None:
         return jsonify({'error': 'Tâche introuvable'}), 404
     if row['status'] == 'running':
@@ -737,10 +832,13 @@ def api_job(job_id):
     return jsonify({'status': 'error', 'error': row['error']})
 
 
-def _run_correction(db, ex_id, answers):
+def _run_correction(db, user, ex_id, answers):
     """Corrige un exercice via l'IA, met a jour competences, profil et vocabulaire.
     Renvoie la reponse destinee au navigateur ; leve ApiError en cas d'echec."""
-    row = db.execute("SELECT * FROM fr_exercises WHERE id = ?", (ex_id,)).fetchone()
+    row = db.execute("SELECT * FROM fr_exercises WHERE id = ? AND user_email = ?",
+                     (ex_id, user)).fetchone()
+    if row is None:
+        raise ApiError('Exercice introuvable', 404)
     payload = json.loads(row['payload'])
     prev = db.execute(
         "SELECT * FROM fr_attempts WHERE exercise_id = ? ORDER BY attempt_no", (ex_id,)
@@ -754,7 +852,7 @@ def _run_correction(db, ex_id, answers):
         f"EXERCICE : {payload['titre']} (niveau {row['level']}, type {row['kind']})",
         f"CONSIGNE : {payload['consigne']}",
         f"TEXTE : {payload['passage']['source']}\n{payload['passage']['texte']}",
-        f"PROFIL DE L'ÉLÈVE : {_profile(db)}",
+        f"PROFIL DE L'ÉLÈVE : {_profile(db, user)}",
         "COMPÉTENCES À NOTER (clé = id) : " + "; ".join(
             f"{s} = {SKILL_BY_ID[s]['label']}" for s in _scored_skills(skills)),
         f"ESSAI N°{attempt_no}",
@@ -793,26 +891,27 @@ def _run_correction(db, ex_id, answers):
 
     # Mise a jour des competences (note par competence, a defaut la note globale)
     comp = fb.get('competences') if isinstance(fb.get('competences'), dict) else {}
-    states = _load_states(db)
+    states = _load_states(db, user)
     level_changes = []
     for s in _scored_skills(skills):
         sc = _clamp01(comp.get(s), default=overall)
         new_state, old_level = apply_result(states[s], sc, attempt_no)
-        _save_state(db, new_state)
+        _save_state(db, user, new_state)
         if new_state['level'] != old_level:
             level_changes.append({'skill': SKILL_BY_ID[s]['label'],
                                   'from': old_level, 'to': new_state['level']})
 
     profil = str(fb.get('profil') or '').strip()[:700]
     if profil:
-        db.execute("UPDATE fr_profile SET summary = ?, updated_at = ? WHERE id = 1",
-                   (profil, datetime.now().isoformat()))
+        db.execute("UPDATE fr_profile SET summary = ?, updated_at = ? WHERE user_email = ?",
+                   (profil, datetime.now().isoformat(), user))
     mots = [m for m in (fb.get('mots') or []) if isinstance(m, dict) and m.get('mot')][:3]
     for m in mots:
         db.execute("""
-            INSERT INTO fr_vocab (word, meaning, learned_at) VALUES (?, ?, ?)
-            ON CONFLICT(word) DO UPDATE SET seen = seen + 1
-        """, (str(m['mot'])[:60], str(m.get('sens', ''))[:200], datetime.now().isoformat()))
+            INSERT INTO fr_vocab (user_email, word, meaning, learned_at) VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_email, word) DO UPDATE SET seen = seen + 1
+        """, (user, str(m['mot'])[:60], str(m.get('sens', ''))[:200],
+              datetime.now().isoformat()))
 
     modele = [m for m in (fb.get('modele') or []) if isinstance(m, dict)]
     stored = {
@@ -846,16 +945,17 @@ def _run_correction(db, ex_id, answers):
         'level_changes': level_changes,
         'can_retry': attempt_no == 1 and overall < 0.85,
         'modele': modele if unlocked else None,
-        'bilan_due': _exercises_since_last_bilan(db) >= BILAN_EVERY,
+        'bilan_due': _exercises_since_last_bilan(db, user) >= BILAN_EVERY,
     }
 
 
 @bp.route('/api/fr/exercises/<int:ex_id>/reveal', methods=['POST'])
 def api_reveal(ex_id):
     """Donne le corrige modele du dernier essai (l'eleve renonce a retenter)."""
-    row = _db().execute(
-        "SELECT feedback FROM fr_attempts WHERE exercise_id = ? ORDER BY attempt_no DESC LIMIT 1",
-        (ex_id,)).fetchone()
+    row = _db().execute("""
+        SELECT a.feedback FROM fr_attempts a JOIN fr_exercises e ON e.id = a.exercise_id
+        WHERE a.exercise_id = ? AND e.user_email = ? ORDER BY a.attempt_no DESC LIMIT 1
+    """, (ex_id, auth.owner_email())).fetchone()
     if row is None:
         return jsonify({'error': "Corrige d'abord ta réponse."}), 404
     return jsonify({'modele': json.loads(row['feedback']).get('modele', [])})

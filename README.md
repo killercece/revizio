@@ -48,6 +48,8 @@ Toutes les pages et API exigent une session, sauf `/login`, `/auth/*`, `/static/
 
 Roles : `admin` (gere les utilisateurs depuis `/admin/utilisateurs` : ajout, passage admin, desactivation) et `user`. Le statut est relu a chaque requete : desactiver un compte coupe sa session aussitot. On ne peut pas retirer son propre acces admin ni le dernier admin.
 
+Donnees par utilisateur : les sessions (verbes, histoire-geo) et tout le module Francais sont rattaches au compte connecte. L'historique cree avant les comptes est rattache a `LEGACY_OWNER_EMAIL` (defaut `lucas.decroi@gmail.com`) par `migrations.py` et `francais.ensure_tables`, au demarrage et sans perte. Un administrateur voit le suivi d'un autre compte avec le selecteur (`?user=`).
+
 Variables d'environnement (PyDeploy) : `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAILS` (administrateurs de depart, separes par des virgules, recrees actifs a chaque demarrage), `PUBLIC_URL` (optionnelle, defaut `https://revizio.cdtechnology.fr`), `SECRET_KEY` (optionnelle : sinon une cle aleatoire est creee dans `data/.secret_key`). Adresse de retour a declarer chez Google : `<PUBLIC_URL>/auth/callback`.
 
 En local : `REVIZIO_AUTH_DISABLED=1` desactive la protection, `REVIZIO_INSECURE_COOKIES=1` autorise le http. Tests : `python tests/test_auth.py`.

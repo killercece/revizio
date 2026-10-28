@@ -44,6 +44,11 @@ SESSION_DAYS = 30
 ROLES = ('admin', 'user')
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
+# Proprietaire de l'historique cree avant l'arrivee des comptes (voir migrations.py)
+LEGACY_OWNER = os.environ.get('LEGACY_OWNER_EMAIL', 'lucas.decroi@gmail.com').strip().lower()
+# Utilisateur fictif quand la protection est coupee (developpement local, tests)
+DEV_OWNER = 'dev@local'
+
 _state = {'db_path': None}
 
 LOGIN_ERRORS = {
@@ -110,6 +115,9 @@ def init_db(db_path):
             )
         """)
         now = datetime.now().isoformat()
+        # Le proprietaire de l'historique peut se connecter des sa premiere visite
+        conn.execute("INSERT OR IGNORE INTO auth_users (email, role, active, created_at, added_by) "
+                     "VALUES (?, 'user', 1, ?, 'historique')", (LEGACY_OWNER, now))
         for email in admin_emails():
             conn.execute("""
                 INSERT INTO auth_users (email, role, active, created_at, added_by)
@@ -154,6 +162,27 @@ def current_user():
     return g.auth_user
 
 
+def owner_email():
+    """Adresse a laquelle rattacher les donnees de la requete courante."""
+    user = current_user()
+    if user:
+        return user['email']
+    if os.environ.get('REVIZIO_AUTH_DISABLED') == '1':
+        return DEV_OWNER
+    abort(401)
+
+
+def viewed_email():
+    """Utilisateur dont on affiche le suivi : le sien, ou celui choisi par un admin
+    avec ?user=<adresse> (seulement si ce compte existe)."""
+    me = owner_email()
+    wanted = request.args.get('user', '').strip().lower()
+    user = current_user()
+    if wanted and user and user['role'] == 'admin' and get_user(wanted):
+        return wanted
+    return me
+
+
 def _active_admin_count(conn):
     return conn.execute(
         "SELECT COUNT(*) AS c FROM auth_users WHERE role = 'admin' AND active = 1"
@@ -186,9 +215,13 @@ def init_app(app, data_dir):
     @app.context_processor
     def inject_user():
         user = current_user()
+        is_admin = bool(user and user['role'] == 'admin')
         return {'current_user': user['email'] if user else None,
-                'is_admin': bool(user and user['role'] == 'admin'),
-                'csrf_token': csrf_token}
+                'is_admin': is_admin,
+                'csrf_token': csrf_token,
+                # selecteur du suivi (admin) : voir la progression d'un autre compte
+                'picker_users': [u['email'] for u in list_users() if u['active']] if is_admin else [],
+                'viewed_user': viewed_email() if user else None}
 
 
 def guard():

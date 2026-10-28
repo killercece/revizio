@@ -30,6 +30,7 @@ app = Flask(__name__)
 # Connexion Google + liste blanche : protege toutes les pages et les API (auth.py).
 # La cle de session vient de SECRET_KEY ou d'un fichier aleatoire dans data/.
 import auth
+import migrations
 auth.init_app(app, Path('data'))
 
 
@@ -155,6 +156,7 @@ def ensure_db():
 # Auto-init au demarrage
 ensure_db()
 auth.init_db(DB_PATH)
+migrations.attach_history(DB_PATH, auth.LEGACY_OWNER)
 
 
 def get_db():
@@ -173,8 +175,9 @@ def close_db(exception):
         db.close()
 
 
-def get_tool_stats(db, tool_id):
-    """Recupere les stats d'un outil (sessions terminees, precision moyenne)."""
+def get_tool_stats(db, tool_id, owner):
+    """Recupere les stats d'un outil pour un utilisateur (sessions terminees,
+    precision moyenne)."""
     row = db.execute("""
         SELECT COUNT(*) as total_sessions,
                COALESCE(AVG(
@@ -183,8 +186,8 @@ def get_tool_stats(db, tool_id):
                    ELSE 100 END
                ), 0) as avg_accuracy
         FROM sessions
-        WHERE tool_type = ? AND completed_at IS NOT NULL
-    """, (tool_id,)).fetchone()
+        WHERE tool_type = ? AND user_email = ? AND completed_at IS NOT NULL
+    """, (tool_id, owner)).fetchone()
     return {
         'total_sessions': row['total_sessions'],
         'avg_accuracy': round(row['avg_accuracy']),
@@ -300,7 +303,7 @@ def ask_proxy(system, user_content, max_tokens=600, list_key=None, temperature=N
 # === MODULE FRANCAIS ===
 # Tables, routes et moteur adaptatif vivent dans francais.py (blueprint).
 import francais
-francais.init(get_db, ask_proxy, DB_PATH)
+francais.init(get_db, ask_proxy, DB_PATH, auth.LEGACY_OWNER)
 app.register_blueprint(francais.bp)
 
 
@@ -313,7 +316,7 @@ def index():
     tools_with_stats = []
     for tool in TOOLS:
         t = dict(tool)
-        t['stats'] = get_tool_stats(db, tool['id'])
+        t['stats'] = get_tool_stats(db, tool['id'], auth.viewed_email())
         tools_with_stats.append(t)
     return render_template('index.html', tools=tools_with_stats)
 
@@ -322,11 +325,12 @@ def index():
 def suivi():
     """Suivi global agrege pour tous les outils."""
     db = get_db()
+    viewed = auth.viewed_email()
 
     # Stats par outil
     tool_stats = []
     for tool in TOOLS:
-        stats = get_tool_stats(db, tool['id'])
+        stats = get_tool_stats(db, tool['id'], viewed)
         tool_stats.append({**tool, 'stats': stats})
 
     # Stats globales
@@ -338,8 +342,8 @@ def suivi():
                    ELSE 100 END
                ), 0) as avg_accuracy,
                COALESCE(AVG(rounds), 0) as avg_rounds
-        FROM sessions WHERE completed_at IS NOT NULL
-    """).fetchone()
+        FROM sessions WHERE completed_at IS NOT NULL AND user_email = ?
+    """, (viewed,)).fetchone()
 
     return render_template('suivi.html',
                            tool_stats=tool_stats,
@@ -373,8 +377,9 @@ def verbs_suivi():
                    total_correct, total_errors, rounds
             FROM sessions
             WHERE completed_at IS NOT NULL AND tool_type = 'irregular-verbs'
+                  AND user_email = ?
             ORDER BY started_at DESC
-        """).fetchall()
+        """, (auth.viewed_email(),)).fetchall()
         sessions = [dict(s) for s in sessions]
 
         for session in sessions:
@@ -396,11 +401,11 @@ def verbs_suivi():
             FROM session_errors se
             JOIN verbs v ON v.id = se.verb_id
             JOIN sessions s ON s.id = se.session_id
-            WHERE s.tool_type = 'irregular-verbs'
+            WHERE s.tool_type = 'irregular-verbs' AND s.user_email = ?
             GROUP BY se.verb_id
             ORDER BY total_errors DESC
             LIMIT 10
-        """).fetchall()
+        """, (auth.viewed_email(),)).fetchall()
         hard_verbs = [dict(v) for v in hard_verbs]
 
         total_sessions = len(sessions)
@@ -447,8 +452,9 @@ def create_verb_session():
 
         db = get_db()
         cursor = db.execute(
-            "INSERT INTO sessions (tool_type, mode, total_verbs) VALUES (?, ?, ?)",
-            ('irregular-verbs', mode, total_verbs)
+            "INSERT INTO sessions (tool_type, mode, total_verbs, user_email) "
+            "VALUES (?, ?, ?, ?)",
+            ('irregular-verbs', mode, total_verbs, auth.owner_email())
         )
         db.commit()
         return jsonify({"id": cursor.lastrowid}), 201
@@ -464,18 +470,22 @@ def complete_verb_session(session_id):
         data = request.get_json()
         db = get_db()
 
-        db.execute("""
+        updated = db.execute("""
             UPDATE sessions
             SET completed_at = ?, total_correct = ?, total_errors = ?, rounds = ?,
                 pause_state = NULL
-            WHERE id = ? AND tool_type = 'irregular-verbs'
+            WHERE id = ? AND tool_type = 'irregular-verbs' AND user_email = ?
         """, (
             datetime.now().isoformat(),
             data.get('total_correct', 0),
             data.get('total_errors', 0),
             data.get('rounds', 0),
-            session_id
-        ))
+            session_id,
+            auth.owner_email()
+        )).rowcount
+        if updated == 0:
+            # session d'un autre utilisateur ou inexistante : ne rien ecrire
+            return jsonify({"error": "Session introuvable"}), 404
 
         errors = data.get('errors', [])
         for err in errors:
@@ -501,12 +511,14 @@ def pause_verb_session(session_id):
         db.execute("""
             UPDATE sessions SET pause_state = ?, total_correct = ?, total_errors = ?, rounds = ?
             WHERE id = ? AND completed_at IS NULL AND tool_type = 'irregular-verbs'
+                  AND user_email = ?
         """, (
             json.dumps(data.get('state', {})),
             data.get('total_correct', 0),
             data.get('total_errors', 0),
             data.get('rounds', 0),
-            session_id
+            session_id,
+            auth.owner_email()
         ))
         db.commit()
         return jsonify({"status": "ok"}), 200
@@ -525,9 +537,9 @@ def get_pending_verb_session():
                    total_errors, rounds, pause_state
             FROM sessions
             WHERE completed_at IS NULL AND pause_state IS NOT NULL
-                  AND tool_type = 'irregular-verbs'
+                  AND tool_type = 'irregular-verbs' AND user_email = ?
             ORDER BY started_at DESC LIMIT 1
-        """).fetchone()
+        """, (auth.owner_email(),)).fetchone()
 
         if session:
             s = dict(session)
@@ -558,8 +570,9 @@ def hg_suivi():
                    total_correct, total_errors, rounds
             FROM sessions
             WHERE completed_at IS NOT NULL AND tool_type = 'histoire-geo'
+                  AND user_email = ?
             ORDER BY started_at DESC
-        """).fetchall()
+        """, (auth.viewed_email(),)).fetchall()
         sessions = [dict(s) for s in sessions]
 
         for session in sessions:
@@ -585,10 +598,11 @@ def hg_suivi():
             JOIN hg_themes t ON t.id = ha.theme_id
             JOIN sessions s ON s.id = ha.session_id
             WHERE s.tool_type = 'histoire-geo' AND ha.correct = 0
+                  AND s.user_email = ?
             GROUP BY ha.theme_id
             ORDER BY total_errors DESC
             LIMIT 10
-        """).fetchall()
+        """, (auth.viewed_email(),)).fetchall()
         hard_themes = [dict(t) for t in hard_themes]
 
         total_sessions = len(sessions)
@@ -606,10 +620,10 @@ def hg_suivi():
             FROM hg_answers ha
             JOIN hg_themes t ON t.id = ha.theme_id
             JOIN sessions s ON s.id = ha.session_id
-            WHERE s.tool_type = 'histoire-geo'
+            WHERE s.tool_type = 'histoire-geo' AND s.user_email = ?
             GROUP BY t.id, ha.session_id
             ORDER BY t.id, last_at
-        """).fetchall()
+        """, (auth.viewed_email(),)).fetchall()
 
         progress = {}  # theme_id -> agregat
         for r in rows:
@@ -757,7 +771,10 @@ def create_hg_session():
             # Anti-repetition : questions deja posees recemment (a eviter).
             try:
                 recent = db.execute(
-                    "SELECT question FROM hg_answers ORDER BY id DESC LIMIT 60"
+                    "SELECT ha.question FROM hg_answers ha "
+                    "JOIN sessions s ON s.id = ha.session_id "
+                    "WHERE s.user_email = ? ORDER BY ha.id DESC LIMIT 60",
+                    (auth.owner_email(),)
                 ).fetchall()
                 recent_qs = [r[0] for r in recent if r and r[0]]
             except sqlite3.Error:
@@ -880,10 +897,11 @@ def create_hg_session():
 
         # Creer la session avec le mapping dans pause_state
         cursor = db.execute(
-            "INSERT INTO sessions (tool_type, mode, total_verbs, pause_state) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO sessions (tool_type, mode, total_verbs, pause_state, user_email) "
+            "VALUES (?, ?, ?, ?, ?)",
             ('histoire-geo', 'themes', len(items),
-             json.dumps({'themes': chosen_ids, 'questions': mapping}))
+             json.dumps({'themes': chosen_ids, 'questions': mapping}),
+             auth.owner_email())
         )
         db.commit()
 
@@ -911,8 +929,8 @@ def correct_hg_session(session_id):
         db = get_db()
         session = db.execute(
             "SELECT id, pause_state FROM sessions "
-            "WHERE id = ? AND tool_type = 'histoire-geo'",
-            (session_id,)
+            "WHERE id = ? AND tool_type = 'histoire-geo' AND user_email = ?",
+            (session_id, auth.owner_email())
         ).fetchone()
         if session is None:
             return jsonify({"error": "Session introuvable"}), 404
