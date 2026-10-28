@@ -178,9 +178,72 @@ def test_francais_isolation_and_admin_view():
     assert 'picker-user' not in other
 
 
+def admin_post(path, **form):
+    admin = client('parent@example.com')
+    admin.get('/admin/utilisateurs')
+    with admin.session_transaction() as sess:
+        token = sess['csrf']
+    return admin.post(path, data={'csrf': token, **form})
+
+
+def test_parent_child_relations():
+    mere, pere = 'mere@example.com', 'pere@example.com'
+    for email in (mere, pere):
+        admin_post('/admin/utilisateurs', email=email, role='user')
+    m, p, lucas = client(mere), client(pere), client(LUCAS)
+
+    def sees_lucas(cl, page='/francais/suivi'):
+        return 'Profil de Lucas' in cl.get(f'{page}?user={LUCAS}').get_data(as_text=True)
+
+    # sans relation, un parent ne voit que lui-meme
+    assert not sees_lucas(m) and not sees_lucas(p)
+    assert 'picker-user' not in m.get('/francais/suivi').get_data(as_text=True)
+    # seul un administrateur gere les relations
+    assert m.post('/admin/relations', data={'parent': mere, 'child': LUCAS}).status_code == 403
+
+    # validations : soi-meme, compte inconnu, doublon
+    admin_post('/admin/relations', parent=mere, child=mere)
+    admin_post('/admin/relations', parent=mere, child='inconnu@example.com')
+    assert auth.list_relations() == []
+    admin_post('/admin/relations', parent=mere, child=LUCAS)
+    admin_post('/admin/relations', parent=mere, child=LUCAS)
+    assert [(r['parent_email'], r['child_email']) for r in auth.list_relations()] == [(mere, LUCAS)]
+
+    # la mere voit le suivi de Lucas (francais, verbes, portail) via le selecteur
+    assert sees_lucas(m)
+    assert '80' in m.get(f'/verbes-irreguliers/suivi?user={LUCAS}').get_data(as_text=True)
+    page = m.get('/francais/suivi').get_data(as_text=True)
+    assert 'picker-user' in page and LUCAS in page
+    assert 'picker-user' in m.get('/').get_data(as_text=True)
+    # ... mais pas le pere, ni les autres comptes (?user= hors droits est ignore)
+    assert not sees_lucas(p)
+    assert 'Profil de Lucas' not in m.get('/francais/suivi?user=parent@example.com').get_data(as_text=True)
+    assert 'picker-user' not in p.get('/francais/suivi').get_data(as_text=True)
+    # la relation n'est pas symetrique : l'enfant ne voit pas son parent
+    assert not auth.can_view(auth.get_user(LUCAS), mere)
+    # les API restent personnelles : la mere ne touche pas aux donnees de Lucas
+    own = m.get(f'/api/fr/overview?user={LUCAS}').get_json()
+    assert own['profile'] == francais.GENERIC_PROFILE
+    assert m.put('/api/verbs/sessions/1', json={'total_correct': 0}).status_code == 404
+    # l'administrateur voit tout le monde
+    admin = client('parent@example.com')
+    assert sees_lucas(admin)
+    assert mere in admin.get('/francais/suivi').get_data(as_text=True)
+
+    # supprimer la relation retire l'acces aussitot
+    admin_post('/admin/relations/supprimer', parent=mere, child=LUCAS)
+    assert auth.list_relations() == [] and not sees_lucas(m)
+    # les relations survivent a un redemarrage (init_db rejoue)
+    admin_post('/admin/relations', parent=mere, child=LUCAS)
+    auth.init_db('data/app.db')
+    assert auth.children_of(mere) == [LUCAS]
+    admin_post('/admin/relations/supprimer', parent=mere, child=LUCAS)
+
+
 if __name__ == '__main__':
     test_history_goes_to_lucas()
     test_lucas_sees_his_history()
     test_other_user_starts_clean_and_is_isolated()
     test_francais_isolation_and_admin_view()
+    test_parent_child_relations()
     print('OK')

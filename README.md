@@ -50,6 +50,8 @@ Roles : `admin` (gere les utilisateurs depuis `/admin/utilisateurs` : ajout, pas
 
 Donnees par utilisateur : les sessions (verbes, histoire-geo) et tout le module Francais sont rattaches au compte connecte. L'historique cree avant les comptes est rattache a `LEGACY_OWNER_EMAIL` (defaut `lucas.decroi@gmail.com`) par `migrations.py` et `francais.ensure_tables`, au demarrage et sans perte. Un administrateur voit le suivi d'un autre compte avec le selecteur (`?user=`).
 
+Relations parent-enfant : un administrateur relie un parent a ses enfants depuis `/admin/utilisateurs` (table `auth_relations`). Un parent consulte le suivi de ses enfants seulement (selecteur `?user=`), un administrateur celui de tous les comptes ; la relation n'est pas symetrique et les API restent personnelles.
+
 Variables d'environnement (PyDeploy) : `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAILS` (administrateurs de depart, separes par des virgules, recrees actifs a chaque demarrage), `PUBLIC_URL` (optionnelle, defaut `https://revizio.cdtechnology.fr`), `SECRET_KEY` (optionnelle : sinon une cle aleatoire est creee dans `data/.secret_key`). Adresse de retour a declarer chez Google : `<PUBLIC_URL>/auth/callback`.
 
 En local : `REVIZIO_AUTH_DISABLED=1` desactive la protection, `REVIZIO_INSECURE_COOKIES=1` autorise le http. Tests : `python tests/test_auth.py`.

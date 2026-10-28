@@ -1,4 +1,4 @@
-{% if is_admin and picker_users|length > 1 %}
+{% if picker_users|length > 1 %}
 <form method="get" class="mb-5 flex items-center gap-2 text-sm">
     <label for="picker-user" class="text-zinc-500 dark:text-zinc-400">Suivi de</label>
     <select id="picker-user" name="user" onchange="this.form.submit()" class="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-1.5">

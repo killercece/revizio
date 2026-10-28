@@ -3,7 +3,7 @@ Application Flask - Revizio
 Portail de revision multi-outils pour le college.
 """
 
-__version__ = '1.5.0'
+__version__ = '1.6.0'
 
 from flask import Flask, render_template, jsonify, request, g, url_for
 import sqlite3

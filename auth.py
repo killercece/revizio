@@ -114,6 +114,16 @@ def init_db(db_path):
                 added_by TEXT
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS auth_relations (
+                parent_email TEXT NOT NULL REFERENCES auth_users(email),
+                child_email TEXT NOT NULL REFERENCES auth_users(email),
+                created_at TEXT NOT NULL,
+                added_by TEXT,
+                PRIMARY KEY (parent_email, child_email),
+                CHECK (parent_email != child_email)
+            )
+        """)
         now = datetime.now().isoformat()
         # Le proprietaire de l'historique peut se connecter des sa premiere visite
         conn.execute("INSERT OR IGNORE INTO auth_users (email, role, active, created_at, added_by) "
@@ -162,6 +172,48 @@ def current_user():
     return g.auth_user
 
 
+def list_relations():
+    conn = _conn()
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM auth_relations ORDER BY parent_email, child_email")]
+    finally:
+        conn.close()
+
+
+def children_of(email):
+    """Adresses des enfants rattaches au parent `email`."""
+    conn = _conn()
+    try:
+        return [r['child_email'] for r in conn.execute(
+            "SELECT child_email FROM auth_relations WHERE parent_email = ? ORDER BY child_email",
+            (email.lower(),))]
+    finally:
+        conn.close()
+
+
+def can_view(viewer, target):
+    """Un utilisateur consulte son propre suivi ; un parent celui de ses enfants ;
+    un administrateur celui de tout compte existant."""
+    if not viewer or not target:
+        return False
+    target = target.lower()
+    if target == viewer['email']:
+        return True
+    if viewer['role'] == 'admin':
+        return get_user(target) is not None
+    return target in children_of(viewer['email'])
+
+
+def viewable_users(viewer):
+    """Comptes proposes dans le selecteur de suivi (le sien en premier)."""
+    if viewer['role'] == 'admin':
+        others = [u['email'] for u in list_users() if u['active'] and u['email'] != viewer['email']]
+    else:
+        others = children_of(viewer['email'])
+    return [viewer['email']] + others
+
+
 def owner_email():
     """Adresse a laquelle rattacher les donnees de la requete courante."""
     user = current_user()
@@ -173,12 +225,11 @@ def owner_email():
 
 
 def viewed_email():
-    """Utilisateur dont on affiche le suivi : le sien, ou celui choisi par un admin
-    avec ?user=<adresse> (seulement si ce compte existe)."""
+    """Utilisateur dont on affiche le suivi : le sien, ou celui choisi avec
+    ?user=<adresse> si le droit de consultation existe (voir can_view)."""
     me = owner_email()
     wanted = request.args.get('user', '').strip().lower()
-    user = current_user()
-    if wanted and user and user['role'] == 'admin' and get_user(wanted):
+    if wanted and can_view(current_user(), wanted):
         return wanted
     return me
 
@@ -220,7 +271,7 @@ def init_app(app, data_dir):
                 'is_admin': is_admin,
                 'csrf_token': csrf_token,
                 # selecteur du suivi (admin) : voir la progression d'un autre compte
-                'picker_users': [u['email'] for u in list_users() if u['active']] if is_admin else [],
+                'picker_users': viewable_users(user) if user else [],
                 'viewed_user': viewed_email() if user else None}
 
 
@@ -325,7 +376,8 @@ def _require_admin():
 @bp.route('/admin/utilisateurs')
 def admin_users():
     _require_admin()
-    return render_template('admin_utilisateurs.html', users=list_users(), roles=ROLES)
+    return render_template('admin_utilisateurs.html', users=list_users(), roles=ROLES,
+                           relations=list_relations())
 
 
 @bp.route('/admin/utilisateurs', methods=['POST'])
@@ -382,4 +434,51 @@ def admin_update_user():
         conn.close()
     logger.info(f"{admin['email']} : {action} {email}")
     flash("Modification enregistrée.", 'ok')
+    return redirect(url_for('auth.admin_users'))
+
+
+@bp.route('/admin/relations', methods=['POST'])
+def admin_add_relation():
+    admin = _require_admin()
+    _check_csrf()
+    parent = request.form.get('parent', '').strip().lower()
+    child = request.form.get('child', '').strip().lower()
+    if not get_user(parent) or not get_user(child):
+        flash("Choisis un parent et un enfant parmi les comptes existants.", 'error')
+    elif parent == child:
+        flash("Un compte ne peut pas être son propre parent.", 'error')
+    else:
+        conn = _conn()
+        try:
+            added = conn.execute(
+                "INSERT OR IGNORE INTO auth_relations (parent_email, child_email, created_at, added_by) "
+                "VALUES (?, ?, ?, ?)", (parent, child, datetime.now().isoformat(), admin['email'])
+            ).rowcount
+            conn.commit()
+        finally:
+            conn.close()
+        if added:
+            logger.info(f"{admin['email']} relie {parent} (parent) a {child} (enfant)")
+            flash(f"{parent} peut maintenant consulter le suivi de {child}.", 'ok')
+        else:
+            flash("Cette relation existe déjà.", 'error')
+    return redirect(url_for('auth.admin_users'))
+
+
+@bp.route('/admin/relations/supprimer', methods=['POST'])
+def admin_remove_relation():
+    admin = _require_admin()
+    _check_csrf()
+    parent = request.form.get('parent', '').strip().lower()
+    child = request.form.get('child', '').strip().lower()
+    conn = _conn()
+    try:
+        removed = conn.execute("DELETE FROM auth_relations WHERE parent_email = ? AND child_email = ?",
+                               (parent, child)).rowcount
+        conn.commit()
+    finally:
+        conn.close()
+    if removed:
+        logger.info(f"{admin['email']} supprime la relation {parent} -> {child}")
+        flash("Relation supprimée.", 'ok')
     return redirect(url_for('auth.admin_users'))
