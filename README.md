@@ -44,8 +44,10 @@ revizio/
 
 ## Securite (connexion Google)
 
-Toutes les pages et API exigent une session, sauf `/login`, `/auth/*`, `/static/*` et `/api/health`. La connexion passe par Google (OpenID Connect) et n'admet que les adresses de `ALLOWED_EMAILS` (e-mail verifie par Google). Sans identifiants Google configures, tout reste ferme.
+Toutes les pages et API exigent une session, sauf `/login`, `/auth/*`, `/static/*` et `/api/health`. La connexion passe par Google (OpenID Connect, PKCE) : seul un utilisateur actif de la table `auth_users`, dont l'e-mail est verifie par Google, entre. Sans identifiants Google configures, tout reste ferme. Modele repris de cdt-hr (utilisateurs en base, roles, administration).
 
-Variables d'environnement (PyDeploy) : `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_EMAILS` (adresses separees par des virgules), `PUBLIC_URL` (optionnelle, defaut `https://revizio.cdtechnology.fr`), `SECRET_KEY` (optionnelle : sinon une cle aleatoire est creee dans `data/.secret_key`). Adresse de retour a declarer chez Google : `<PUBLIC_URL>/auth/callback`.
+Roles : `admin` (gere les utilisateurs depuis `/admin/utilisateurs` : ajout, passage admin, desactivation) et `user`. Le statut est relu a chaque requete : desactiver un compte coupe sa session aussitot. On ne peut pas retirer son propre acces admin ni le dernier admin.
+
+Variables d'environnement (PyDeploy) : `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ADMIN_EMAILS` (administrateurs de depart, separes par des virgules, recrees actifs a chaque demarrage), `PUBLIC_URL` (optionnelle, defaut `https://revizio.cdtechnology.fr`), `SECRET_KEY` (optionnelle : sinon une cle aleatoire est creee dans `data/.secret_key`). Adresse de retour a declarer chez Google : `<PUBLIC_URL>/auth/callback`.
 
 En local : `REVIZIO_AUTH_DISABLED=1` desactive la protection, `REVIZIO_INSECURE_COOKIES=1` autorise le http. Tests : `python tests/test_auth.py`.

@@ -1,0 +1,56 @@
+{% set active_page = 'admin_users' %}
+{% extends "base.html" %}
+{% block title %}Utilisateurs{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold tracking-tight mb-1">Utilisateurs</h1>
+        <p class="text-sm text-zinc-500 dark:text-zinc-400">Seuls les comptes Google listés ici et actifs peuvent se connecter. Un administrateur gère cette liste.</p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <p class="text-sm rounded-lg px-4 py-3 mb-4 {% if category == 'ok' %}bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300{% else %}bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300{% endif %}" role="status">{{ message }}</p>
+    {% endfor %}
+    {% endwith %}
+
+    <form method="post" action="/admin/utilisateurs" class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 mb-6 flex flex-col sm:flex-row gap-3">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <input type="email" name="email" required maxlength="200" placeholder="adresse.google@exemple.com" class="flex-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400">
+        <select name="role" class="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm">
+            <option value="user">Utilisateur</option>
+            <option value="admin">Administrateur</option>
+        </select>
+        <button type="submit" class="bg-violet-600 hover:bg-violet-700 text-white font-medium px-5 py-2 rounded-lg text-sm">Ajouter</button>
+    </form>
+
+    <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800">
+        {% for u in users %}
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 {% if not u.active %}opacity-60{% endif %}">
+            <div class="min-w-0">
+                <div class="text-sm font-medium truncate">{{ u.email }}{% if u.name %} <span class="text-zinc-500 font-normal">· {{ u.name }}</span>{% endif %}</div>
+                <div class="text-xs text-zinc-500 dark:text-zinc-400">
+                    {{ 'Administrateur' if u.role == 'admin' else 'Utilisateur' }}{% if not u.active %} · désactivé{% endif %}
+                    · {% if u.last_login_at %}dernière connexion {{ u.last_login_at[:16].replace('T', ' ') }}{% else %}jamais connecté{% endif %}
+                </div>
+            </div>
+            <form method="post" action="/admin/utilisateurs/modifier" class="flex gap-2 text-xs">
+                <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+                <input type="hidden" name="email" value="{{ u.email }}">
+                {% if u.active %}
+                    {% if u.role == 'admin' %}
+                    <button name="action" value="retrograder" class="px-3 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800">Retirer admin</button>
+                    {% else %}
+                    <button name="action" value="promouvoir" class="px-3 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800">Passer admin</button>
+                    {% endif %}
+                    <button name="action" value="desactiver" class="px-3 py-1.5 rounded-lg border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40">Désactiver</button>
+                {% else %}
+                    <button name="action" value="reactiver" class="px-3 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800">Réactiver</button>
+                {% endif %}
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

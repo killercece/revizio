@@ -154,6 +154,7 @@ def ensure_db():
 
 # Auto-init au demarrage
 ensure_db()
+auth.init_db(DB_PATH)
 
 
 def get_db():

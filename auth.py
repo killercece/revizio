@@ -1,29 +1,38 @@
 """
-Authentification de Revizio : connexion Google (OpenID Connect) et liste blanche.
+Authentification de Revizio : connexion Google (OpenID Connect avec PKCE) et
+gestion des utilisateurs, sur le modele de cdt-hr.
 
 - Tout est protege par defaut (pages et API), sauf /login, /auth/*, /static/* et
   /api/health ; sans identifiants Google configures, rien n'est accessible
   (le blocage est la valeur par defaut, jamais l'ouverture).
-- Seules les adresses de ALLOWED_EMAILS (virgules) peuvent entrer, et leur
-  e-mail doit etre verifie par Google. La liste est relue a chaque requete :
-  retirer une adresse coupe aussitot l'acces de sa session.
-- Configuration par variables d'environnement (PyDeploy) :
-  GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ALLOWED_EMAILS, PUBLIC_URL (optionnelle),
-  SECRET_KEY (optionnelle : a defaut, une cle aleatoire est creee dans data/).
+- Les utilisateurs vivent en base (table auth_users) avec un role : `admin`
+  (gere les utilisateurs) ou `user`. Seul un utilisateur actif dont l'e-mail est
+  verifie par Google peut entrer. Son statut est relu a chaque requete :
+  desactiver un compte coupe aussitot sa session.
+- Les administrateurs de depart viennent de ADMIN_EMAILS (virgules) : ils sont
+  recrees actifs a chaque demarrage, ce qui evite de se verrouiller dehors.
+  Les autres comptes s'ajoutent depuis /admin/utilisateurs.
+- Variables d'environnement (PyDeploy) : GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  ADMIN_EMAILS, PUBLIC_URL (optionnelle), SECRET_KEY (optionnelle : a defaut,
+  une cle aleatoire est creee dans data/).
 - REVIZIO_AUTH_DISABLED=1 desactive la protection, pour le developpement local
   et les tests uniquement.
 """
 
+import hmac
 import logging
 import os
+import re
 import secrets
-from datetime import timedelta
+import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
 from authlib.integrations.base_client import OAuthError
 from authlib.integrations.flask_client import OAuth
-from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
+from flask import (Blueprint, abort, flash, g, jsonify, redirect, render_template,
+                   request, session, url_for)
 
 bp = Blueprint('auth', __name__)
 logger = logging.getLogger(__name__)
@@ -32,6 +41,10 @@ oauth = OAuth()
 DEFAULT_PUBLIC_URL = 'https://revizio.cdtechnology.fr'
 GOOGLE_METADATA_URL = 'https://accounts.google.com/.well-known/openid-configuration'
 SESSION_DAYS = 30
+ROLES = ('admin', 'user')
+EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+
+_state = {'db_path': None}
 
 LOGIN_ERRORS = {
     'refuse': "Ce compte Google n'est pas autorisé à utiliser Revizio.",
@@ -39,6 +52,8 @@ LOGIN_ERRORS = {
     'non_configure': "La connexion Google n'est pas encore configurée.",
 }
 
+
+# === CONFIGURATION ===
 
 def load_secret_key(data_dir):
     """Cle de signature des sessions : variable SECRET_KEY, sinon fichier persistant."""
@@ -53,9 +68,9 @@ def load_secret_key(data_dir):
     return path.read_text().strip()
 
 
-def allowed_emails():
-    raw = os.environ.get('ALLOWED_EMAILS', '')
-    return {e.strip().lower() for e in raw.split(',') if e.strip()}
+def admin_emails():
+    raw = os.environ.get('ADMIN_EMAILS', '')
+    return [e.strip().lower() for e in raw.split(',') if e.strip()]
 
 
 def google_configured():
@@ -70,11 +85,82 @@ def safe_next(target):
     return target if not parsed.scheme and not parsed.netloc else '/'
 
 
-def current_email():
-    user = session.get('user') or {}
-    email = str(user.get('email', '')).lower()
-    return email if email and email in allowed_emails() else None
+# === UTILISATEURS (SQLite) ===
 
+def _conn():
+    conn = sqlite3.connect(_state['db_path'], timeout=30)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db(db_path):
+    """Cree la table des utilisateurs et (re)pose les administrateurs de depart."""
+    _state['db_path'] = db_path
+    conn = _conn()
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS auth_users (
+                email TEXT PRIMARY KEY,
+                name TEXT NOT NULL DEFAULT '',
+                role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                last_login_at TEXT,
+                added_by TEXT
+            )
+        """)
+        now = datetime.now().isoformat()
+        for email in admin_emails():
+            conn.execute("""
+                INSERT INTO auth_users (email, role, active, created_at, added_by)
+                VALUES (?, 'admin', 1, ?, 'ADMIN_EMAILS')
+                ON CONFLICT(email) DO UPDATE SET role = 'admin', active = 1
+            """, (email, now))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_user(email):
+    conn = _conn()
+    try:
+        row = conn.execute("SELECT * FROM auth_users WHERE email = ?",
+                           (email.lower(),)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def list_users():
+    conn = _conn()
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM auth_users ORDER BY active DESC, role, email")]
+    finally:
+        conn.close()
+
+
+def current_user():
+    """Utilisateur actif de la session, relu en base a chaque requete (mis en cache
+    pour la requete), ou None."""
+    if 'auth_user' not in g:
+        user = None
+        email = str((session.get('user') or {}).get('email', '')).lower()
+        if email:
+            found = get_user(email)
+            if found and found['active']:
+                user = found
+        g.auth_user = user
+    return g.auth_user
+
+
+def _active_admin_count(conn):
+    return conn.execute(
+        "SELECT COUNT(*) AS c FROM auth_users WHERE role = 'admin' AND active = 1"
+    ).fetchone()['c']
+
+
+# === INITIALISATION ===
 
 def init_app(app, data_dir):
     """Branche l'authentification : cle de session, cookies, Google, garde globale."""
@@ -92,14 +178,17 @@ def init_app(app, data_dir):
         client_id=os.environ.get('GOOGLE_CLIENT_ID', ''),
         client_secret=os.environ.get('GOOGLE_CLIENT_SECRET', ''),
         server_metadata_url=GOOGLE_METADATA_URL,
-        client_kwargs={'scope': 'openid email profile'},
+        client_kwargs={'scope': 'openid email profile', 'code_challenge_method': 'S256'},
     )
     app.register_blueprint(bp)
     app.before_request(guard)
 
     @app.context_processor
     def inject_user():
-        return {'current_user': current_email()}
+        user = current_user()
+        return {'current_user': user['email'] if user else None,
+                'is_admin': bool(user and user['role'] == 'admin'),
+                'csrf_token': csrf_token}
 
 
 def guard():
@@ -110,16 +199,32 @@ def guard():
     if (path in ('/login', '/api/health') or path.startswith('/auth/')
             or path.startswith('/static/')):
         return None
-    if current_email():
+    if current_user():
         return None
     if path.startswith('/api/'):
         return jsonify({'error': 'Authentification requise'}), 401
     return redirect(url_for('auth.login', next=request.full_path.rstrip('?')))
 
 
+def csrf_token():
+    if 'csrf' not in session:
+        session['csrf'] = secrets.token_urlsafe(32)
+    return session['csrf']
+
+
+def _check_csrf():
+    sent = request.form.get('csrf', '')
+    expected = session.get('csrf', '')
+    # un jeton vide ne doit jamais etre accepte (deux chaines vides sont egales)
+    if not expected or not hmac.compare_digest(sent, expected):
+        abort(400)
+
+
+# === CONNEXION ===
+
 @bp.route('/login')
 def login():
-    if current_email():
+    if current_user():
         return redirect(safe_next(request.args.get('next')))
     error = LOGIN_ERRORS.get(request.args.get('erreur', ''))
     if not google_configured() and not error:
@@ -148,14 +253,22 @@ def auth_callback():
 
     info = token.get('userinfo') or {}
     email = str(info.get('email', '')).lower()
-    if not email or info.get('email_verified') is not True or email not in allowed_emails():
+    user = get_user(email) if email else None
+    if (not user or not user['active'] or info.get('email_verified') is not True):
         logger.warning(f"Connexion refusee pour {email or '(sans e-mail)'}")
         session.clear()
         return redirect(url_for('auth.login', erreur='refuse'))
 
+    conn = _conn()
+    try:
+        conn.execute("UPDATE auth_users SET last_login_at = ?, name = ? WHERE email = ?",
+                     (datetime.now().isoformat(), str(info.get('name', ''))[:120], email))
+        conn.commit()
+    finally:
+        conn.close()
     target = safe_next(session.get('next'))
     session.clear()
-    session['user'] = {'email': email, 'name': str(info.get('name', ''))}
+    session['user'] = {'email': email}
     session.permanent = True
     logger.info(f"Connexion de {email}")
     return redirect(target)
@@ -165,3 +278,75 @@ def auth_callback():
 def logout():
     session.clear()
     return redirect(url_for('auth.login'))
+
+
+# === ADMINISTRATION DES UTILISATEURS ===
+
+def _require_admin():
+    user = current_user()
+    if not user or user['role'] != 'admin':
+        abort(403)
+    return user
+
+
+@bp.route('/admin/utilisateurs')
+def admin_users():
+    _require_admin()
+    return render_template('admin_utilisateurs.html', users=list_users(), roles=ROLES)
+
+
+@bp.route('/admin/utilisateurs', methods=['POST'])
+def admin_add_user():
+    admin = _require_admin()
+    _check_csrf()
+    email = request.form.get('email', '').strip().lower()
+    role = request.form.get('role', 'user')
+    if not EMAIL_RE.match(email) or len(email) > 200 or role not in ROLES:
+        flash("Adresse e-mail ou rôle invalide.", 'error')
+    elif get_user(email):
+        flash(f"{email} existe déjà.", 'error')
+    else:
+        conn = _conn()
+        try:
+            conn.execute("INSERT INTO auth_users (email, role, active, created_at, added_by) "
+                         "VALUES (?, ?, 1, ?, ?)",
+                         (email, role, datetime.now().isoformat(), admin['email']))
+            conn.commit()
+        finally:
+            conn.close()
+        logger.info(f"{admin['email']} ajoute {email} ({role})")
+        flash(f"{email} peut maintenant se connecter.", 'ok')
+    return redirect(url_for('auth.admin_users'))
+
+
+@bp.route('/admin/utilisateurs/modifier', methods=['POST'])
+def admin_update_user():
+    """Change le role ou l'etat actif d'un compte, en gardant au moins un admin actif."""
+    admin = _require_admin()
+    _check_csrf()
+    email = request.form.get('email', '').strip().lower()
+    action = request.form.get('action', '')
+    target = get_user(email)
+    if not target or action not in ('promouvoir', 'retrograder', 'desactiver', 'reactiver'):
+        abort(400)
+
+    conn = _conn()
+    try:
+        removes_admin = (target['role'] == 'admin' and target['active']
+                         and action in ('retrograder', 'desactiver'))
+        if removes_admin and (email == admin['email'] or _active_admin_count(conn) <= 1):
+            flash("Tu ne peux pas retirer ton propre accès d'administrateur, ni le "
+                  "dernier administrateur.", 'error')
+            return redirect(url_for('auth.admin_users'))
+        if action in ('promouvoir', 'retrograder'):
+            conn.execute("UPDATE auth_users SET role = ? WHERE email = ?",
+                         ('admin' if action == 'promouvoir' else 'user', email))
+        else:
+            conn.execute("UPDATE auth_users SET active = ? WHERE email = ?",
+                         (1 if action == 'reactiver' else 0, email))
+        conn.commit()
+    finally:
+        conn.close()
+    logger.info(f"{admin['email']} : {action} {email}")
+    flash("Modification enregistrée.", 'ok')
+    return redirect(url_for('auth.admin_users'))
